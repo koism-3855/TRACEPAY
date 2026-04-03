@@ -708,10 +708,12 @@ def seed_data():
         db.session.add(member)
         db.session.commit()
 
+# gunicorn でも __main__ でも必ず実行されるようにモジュールレベルで初期化
+with app.app_context():
+    db.create_all()
+    seed_data()
+
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-        seed_data()
     port = int(os.environ.get('PORT', 8080))
     debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
     app.run(port=port, debug=debug)

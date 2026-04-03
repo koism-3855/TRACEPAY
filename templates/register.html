@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>新規登録 — TRACE PAY</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --surface2: #21262d;
+    --border: #30363d; --text: #e6edf3; --muted: #8b949e;
+    --accent: #58a6ff; --green: #3fb950; --red: #f85149;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .container { width: 100%; max-width: 420px; padding: 24px; }
+  .logo { text-align: center; margin-bottom: 32px; }
+  .logo h1 { font-size: 28px; font-weight: 800; color: var(--accent); letter-spacing: 3px; }
+  .logo p { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 32px; }
+  .card h2 { font-size: 18px; font-weight: 600; margin-bottom: 24px; }
+  .form-group { margin-bottom: 18px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 500; }
+  input, select { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 10px 14px; border-radius: 8px; font-size: 14px; transition: border-color 0.15s; }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  select option { background: var(--surface2); }
+  .btn { width: 100%; padding: 11px; background: var(--accent); border: none; border-radius: 8px; color: #000; font-size: 14px; font-weight: 700; cursor: pointer; transition: opacity 0.15s; margin-top: 4px; }
+  .btn:hover { opacity: 0.85; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .error { background: rgba(248,81,73,0.1); border: 1px solid rgba(248,81,73,0.3); color: var(--red); padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; display: none; }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .footer { text-align: center; margin-top: 20px; font-size: 13px; color: var(--muted); }
+  .footer a { color: var(--accent); cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="logo">
+    <h1>TRACE PAY</h1>
+    <p>B2B建設業 信用インフラ</p>
+  </div>
+  <div class="card">
+    <h2>新規アカウント登録</h2>
+    <div id="error-msg" class="error"></div>
+    <div class="form-group">
+      <label>メールアドレス</label>
+      <input type="email" id="email" placeholder="example@company.jp">
+    </div>
+    <div class="form-group">
+      <label>パスワード</label>
+      <input type="password" id="password" placeholder="••••••••">
+      <div class="hint">6文字以上で設定してください</div>
+    </div>
+    <div class="form-group">
+      <label>パスワード（確認）</label>
+      <input type="password" id="password2" placeholder="••••••••">
+    </div>
+    <div class="form-group">
+      <label>所属企業</label>
+      <select id="company">
+        <option value="">選択してください（任意）</option>
+      </select>
+    </div>
+    <button class="btn" id="reg-btn" onclick="doRegister()">アカウント作成</button>
+    <div class="footer">
+      すでにアカウントをお持ちの方は <a onclick="location.href='/login'">ログイン</a>
+    </div>
+  </div>
+</div>
+
+<script>
+async function loadCompanies() {
+  try {
+    const res = await fetch('/api/companies', { credentials: 'include' });
+    if (!res.ok) return;
+    const companies = await res.json();
+    const sel = document.getElementById('company');
+    companies.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = `${c.name}（${c.tier}）`;
+      sel.appendChild(opt);
+    });
+  } catch (e) {}
+}
+
+async function doRegister() {
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const password2 = document.getElementById('password2').value;
+  const company_id = document.getElementById('company').value || null;
+  const btn = document.getElementById('reg-btn');
+  const errEl = document.getElementById('error-msg');
+  errEl.style.display = 'none';
+  if (!email || !password) { showError('メールアドレスとパスワードを入力してください'); return; }
+  if (password !== password2) { showError('パスワードが一致しません'); return; }
+  if (password.length < 6) { showError('パスワードは6文字以上で設定してください'); return; }
+  btn.disabled = true;
+  btn.textContent = '登録中...';
+  try {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, company_id: company_id ? Number(company_id) : null }),
+      credentials: 'include'
+    });
+    const data = await res.json();
+    if (!res.ok) { showError(data.error || '登録に失敗しました'); return; }
+    location.href = '/';
+  } catch (e) {
+    showError('サーバーに接続できませんでした');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'アカウント作成';
+  }
+}
+
+function showError(msg) {
+  const el = document.getElementById('error-msg');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+loadCompanies();
+</script>
+</body>
+</html>

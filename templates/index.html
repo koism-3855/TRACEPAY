@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TRACE PAY — B2B信用インフラ</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --surface2: #21262d;
+    --border: #30363d; --text: #e6edf3; --muted: #8b949e;
+    --accent: #58a6ff; --green: #3fb950; --yellow: #d29922;
+    --red: #f85149; --orange: #db6d28; --purple: #bc8cff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; }
+  a { color: var(--accent); text-decoration: none; }
+
+  /* Layout */
+  .app { display: flex; height: 100vh; overflow: hidden; }
+  .sidebar { width: 220px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+  .sidebar-logo { padding: 20px 16px; border-bottom: 1px solid var(--border); }
+  .sidebar-logo h1 { font-size: 18px; font-weight: 700; color: var(--accent); letter-spacing: 2px; }
+  .sidebar-logo small { color: var(--muted); font-size: 11px; }
+  .sidebar-nav { padding: 8px 0; flex: 1; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; cursor: pointer; color: var(--muted); transition: all 0.15s; border-left: 3px solid transparent; }
+  .nav-item:hover { color: var(--text); background: var(--surface2); }
+  .nav-item.active { color: var(--accent); border-left-color: var(--accent); background: rgba(88,166,255,0.08); }
+  .nav-icon { width: 18px; text-align: center; }
+  .sidebar-user { padding: 12px 16px; border-top: 1px solid var(--border); }
+  .user-info { margin-bottom: 10px; }
+  .user-email { font-size: 12px; color: var(--text); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .user-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .user-role-badge { display: inline-block; font-size: 10px; padding: 1px 7px; border-radius: 10px; margin-left: 4px; }
+  .role-admin { background: rgba(88,166,255,0.2); color: var(--accent); }
+  .role-member { background: rgba(63,185,80,0.2); color: var(--green); }
+  .role-superadmin { background: rgba(188,140,255,0.2); color: var(--purple); }
+  .btn-logout { width: 100%; padding: 7px; background: var(--surface2); border: 1px solid var(--border); color: var(--muted); border-radius: 6px; cursor: pointer; font-size: 12px; text-align: left; display: flex; align-items: center; gap: 6px; transition: all 0.15s; }
+  .btn-logout:hover { color: var(--red); border-color: var(--red); background: rgba(248,81,73,0.08); }
+  .main { flex: 1; overflow-y: auto; }
+  .page { display: none; padding: 24px; }
+  .page.active { display: block; }
+
+  /* Header */
+  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  .page-title { font-size: 20px; font-weight: 600; }
+  .page-subtitle { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+  /* Cards */
+  .cards { display: grid; gap: 16px; }
+  .cards-4 { grid-template-columns: repeat(4, 1fr); }
+  .cards-3 { grid-template-columns: repeat(3, 1fr); }
+  .cards-2 { grid-template-columns: repeat(2, 1fr); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
+  .card-title { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .card-value { font-size: 28px; font-weight: 700; }
+  .card-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .card-green { border-top: 3px solid var(--green); }
+  .card-blue { border-top: 3px solid var(--accent); }
+  .card-red { border-top: 3px solid var(--red); }
+  .card-yellow { border-top: 3px solid var(--yellow); }
+
+  /* Table */
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: var(--surface2); padding: 10px 14px; text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+  td { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+
+  /* Badges */
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .badge-green { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge-red { background: rgba(248,81,73,0.15); color: var(--red); }
+  .badge-yellow { background: rgba(210,153,34,0.15); color: var(--yellow); }
+  .badge-blue { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .badge-purple { background: rgba(188,140,255,0.15); color: var(--purple); }
+  .badge-orange { background: rgba(219,109,40,0.15); color: var(--orange); }
+  .badge-gray { background: rgba(139,148,158,0.15); color: var(--muted); }
+
+  /* Grade colors */
+  .grade-AAA { color: var(--green); font-weight: 700; }
+  .grade-AA { color: #4ade80; font-weight: 700; }
+  .grade-A { color: var(--accent); font-weight: 700; }
+  .grade-B { color: var(--yellow); font-weight: 700; }
+  .grade-C { color: var(--red); font-weight: 700; }
+
+  /* Score bar */
+  .score-bar { background: var(--surface2); border-radius: 4px; height: 6px; overflow: hidden; margin-top: 4px; }
+  .score-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); cursor: pointer; font-size: 13px; transition: all 0.15s; }
+  .btn:hover { background: var(--border); }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 600; }
+  .btn-primary:hover { opacity: 0.85; }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+  .btn-danger { background: rgba(248,81,73,0.15); border-color: var(--red); color: var(--red); }
+  .btn-success { background: rgba(63,185,80,0.15); border-color: var(--green); color: var(--green); }
+
+  /* Form */
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center; }
+  .modal-bg.open { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 24px; width: 480px; max-width: 95vw; }
+  .modal h3 { margin-bottom: 20px; font-size: 16px; }
+  .form-group { margin-bottom: 16px; }
+  label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  input, select { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; font-size: 13px; }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+  /* Alert cards */
+  .alert-item { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 10px; display: flex; align-items: flex-start; gap: 12px; }
+  .alert-item.high { border-left: 4px solid var(--red); }
+  .alert-item.medium { border-left: 4px solid var(--yellow); }
+  .alert-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .alert-msg { font-size: 13px; margin-bottom: 4px; }
+  .alert-meta { font-size: 11px; color: var(--muted); }
+
+  /* Chart placeholder */
+  .mini-chart { display: flex; align-items: flex-end; gap: 6px; height: 60px; }
+  .mini-bar { flex: 1; border-radius: 3px 3px 0 0; min-width: 20px; }
+
+  /* Flow */
+  .flow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .flow-node { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-size: 12px; white-space: nowrap; }
+  .flow-arrow { color: var(--muted); }
+
+  /* Tier colors */
+  .tier-元請 { color: var(--accent); }
+  .tier-下請 { color: var(--purple); }
+  .tier-孫請 { color: var(--orange); }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+  .tab { padding: 8px 16px; cursor: pointer; color: var(--muted); font-size: 13px; border-bottom: 2px solid transparent; transition: all 0.15s; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Spacers */
+  .mt-16 { margin-top: 16px; }
+  .mt-24 { margin-top: 24px; }
+  .empty { text-align: center; padding: 40px; color: var(--muted); }
+  .loading { color: var(--muted); padding: 20px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <h1>TRACE PAY</h1>
+      <small>B2B信用インフラ</small>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-item active" onclick="showPage('dashboard')">
+        <span class="nav-icon">◉</span> ダッシュボード
+      </div>
+      <div class="nav-item" onclick="showPage('projects')">
+        <span class="nav-icon">⊟</span> 案件管理
+      </div>
+      <div class="nav-item" onclick="showPage('companies')">
+        <span class="nav-icon">◈</span> 企業スコア
+      </div>
+      <div class="nav-item" onclick="showPage('payments')">
+        <span class="nav-icon">⊕</span> 支払い追跡
+      </div>
+      <div class="nav-item" onclick="showPage('alerts')">
+        <span class="nav-icon">⚠</span> リスクアラート
+        <span id="alert-badge" style="margin-left:auto;background:var(--red);color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;display:none"></span>
+      </div>
+      <div class="nav-item" id="nav-admin" style="display:none" onclick="location.href='/admin'">
+        <span class="nav-icon">⚙</span> 管理画面
+      </div>
+    </div>
+
+    <div class="sidebar-user">
+      <div class="user-info">
+        <div class="user-email" id="user-email">—</div>
+        <div class="user-meta">
+          <span id="user-company">—</span>
+          <span class="user-role-badge" id="user-role-badge"></span>
+        </div>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">
+        <span>⎋</span> ログアウト
+      </button>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- Dashboard -->
+    <div id="page-dashboard" class="page active">
+      <div class="page-header">
+        <div>
+          <div class="page-title">ダッシュボード</div>
+          <div class="page-subtitle">B2B建設業 信用・支払い状況の概要</div>
+        </div>
+        <button class="btn" onclick="loadDashboard()">↻ 更新</button>
+      </div>
+      <div id="dash-kpi" class="cards cards-4">
+        <div class="card card-blue"><div class="card-title">総案件数</div><div class="card-value" id="d-projects">—</div></div>
+        <div class="card card-green"><div class="card-title">総支払額</div><div class="card-value" id="d-amount">—</div></div>
+        <div class="card card-yellow"><div class="card-title">遅延件数</div><div class="card-value" id="d-delayed">—</div></div>
+        <div class="card card-red"><div class="card-title">未払い件数</div><div class="card-value" id="d-unpaid">—</div></div>
+      </div>
+      <div class="cards cards-2 mt-24">
+        <div class="card">
+          <div class="card-title">信用グレード分布</div>
+          <div id="dash-grades" style="margin-top:12px"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">支払い状況</div>
+          <div id="dash-payment-chart" style="margin-top:12px"></div>
+        </div>
+      </div>
+      <div class="mt-24">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div style="font-weight:600">最近のリスクアラート</div>
+          <a onclick="showPage('alerts')" style="cursor:pointer;font-size:12px">すべて見る →</a>
+        </div>
+        <div id="dash-alerts"></div>
+      </div>
+    </div>
+
+    <!-- Projects -->
+    <div id="page-projects" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">案件管理</div>
+          <div class="page-subtitle">建設案件の登録・管理</div>
+        </div>
+        <button class="btn btn-primary" onclick="openModal('project-modal')">＋ 新規案件</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>案件コード</th><th>案件名</th><th>総工事費</th><th>ステータス</th><th>期間</th><th>元請企業</th><th>操作</th></tr>
+          </thead>
+          <tbody id="projects-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Companies -->
+    <div id="page-companies" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">企業スコア</div>
+          <div class="page-subtitle">信用スコア・グレード管理</div>
+        </div>
+        <button class="btn btn-primary" onclick="openModal('company-modal')">＋ 企業追加</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>企業名</th><th>区分</th><th>信用グレード</th><th>スコア</th><th>支払い完了率</th><th>完遂率</th></tr>
+          </thead>
+          <tbody id="companies-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Payments -->
+    <div id="page-payments" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">支払い追跡</div>
+          <div class="page-subtitle">支払いフローの記録・更新</div>
+        </div>
+        <button class="btn btn-primary" onclick="openModal('payment-modal')">＋ 支払い登録</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>案件</th><th>支払元</th><th>支払先</th><th>金額</th><th>予定日</th><th>実績日</th><th>ステータス</th><th>遅延日数</th><th>操作</th></tr>
+          </thead>
+          <tbody id="payments-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Alerts -->
+    <div id="page-alerts" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">リスクアラート</div>
+          <div class="page-subtitle">延滞・低スコア企業の警告</div>
+        </div>
+        <button class="btn" onclick="loadAlerts()">↻ 更新</button>
+      </div>
+      <div id="alerts-list"></div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Project Modal -->
+<div id="project-modal" class="modal-bg">
+  <div class="modal">
+    <h3>新規案件登録</h3>
+    <div class="form-group">
+      <label>案件名</label>
+      <input type="text" id="p-name" placeholder="例: 渋谷再開発プロジェクト">
+    </div>
+    <div class="form-group">
+      <label>総工事費（円）</label>
+      <input type="number" id="p-cost" placeholder="例: 100000000">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>開始日</label>
+        <input type="date" id="p-start">
+      </div>
+      <div class="form-group">
+        <label>終了日</label>
+        <input type="date" id="p-end">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>元請企業</label>
+      <select id="p-company"></select>
+    </div>
+    <div class="form-group">
+      <label>ステータス</label>
+      <select id="p-status">
+        <option>進行中</option><option>完了</option><option>中断</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('project-modal')">キャンセル</button>
+      <button class="btn btn-primary" onclick="createProject()">登録</button>
+    </div>
+  </div>
+</div>
+
+<!-- Company Modal -->
+<div id="company-modal" class="modal-bg">
+  <div class="modal">
+    <h3>企業追加</h3>
+    <div class="form-group">
+      <label>企業名</label>
+      <input type="text" id="c-name" placeholder="例: 山田建設株式会社">
+    </div>
+    <div class="form-group">
+      <label>区分</label>
+      <select id="c-tier">
+        <option>元請</option><option>下請</option><option>孫請</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>支払い完了率（%）</label>
+        <input type="number" id="c-payment-rate" value="100" min="0" max="100">
+      </div>
+      <div class="form-group">
+        <label>完遂率（%）</label>
+        <input type="number" id="c-completion-rate" value="100" min="0" max="100">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('company-modal')">キャンセル</button>
+      <button class="btn btn-primary" onclick="createCompany()">追加</button>
+    </div>
+  </div>
+</div>
+
+<!-- Payment Modal -->
+<div id="payment-modal" class="modal-bg">
+  <div class="modal">
+    <h3>支払い登録</h3>
+    <div class="form-group">
+      <label>案件</label>
+      <select id="pay-project"></select>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>支払元</label>
+        <select id="pay-payer"></select>
+      </div>
+      <div class="form-group">
+        <label>支払先</label>
+        <select id="pay-payee"></select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>金額（円）</label>
+      <input type="number" id="pay-amount" placeholder="例: 5000000">
+    </div>
+    <div class="form-group">
+      <label>支払予定日</label>
+      <input type="date" id="pay-date">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('payment-modal')">キャンセル</button>
+      <button class="btn btn-primary" onclick="createPayment()">登録</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:8080/api';
+
+// ─── Navigation ───
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  event.currentTarget.classList.add('active');
+  if (id === 'dashboard') loadDashboard();
+  if (id === 'projects') loadProjects();
+  if (id === 'companies') loadCompanies();
+  if (id === 'payments') loadPayments();
+  if (id === 'alerts') loadAlerts();
+}
+
+// ─── Modals ───
+function openModal(id) {
+  if (id === 'project-modal' || id === 'payment-modal') populateSelects();
+  document.getElementById(id).classList.add('open');
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+document.querySelectorAll('.modal-bg').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+});
+
+// ─── Helpers ───
+function fmt(n) {
+  if (n >= 100000000) return (n/100000000).toFixed(1) + '億';
+  if (n >= 10000) return Math.round(n/10000) + '万';
+  return n.toLocaleString();
+}
+function statusBadge(s) {
+  const m = {'完了':'badge-green','遅延':'badge-yellow','未払い':'badge-red','進行中':'badge-blue','中断':'badge-gray'};
+  return `<span class="badge ${m[s]||'badge-gray'}">${s}</span>`;
+}
+function gradeBadge(g) {
+  return `<span class="grade-${g}">${g}</span>`;
+}
+function scoreBar(s) {
+  const color = s >= 80 ? '#3fb950' : s >= 60 ? '#58a6ff' : s >= 40 ? '#d29922' : '#f85149';
+  return `<div class="score-bar"><div class="score-fill" style="width:${s}%;background:${color}"></div></div>`;
+}
+
+// ─── Dashboard ───
+async function loadDashboard() {
+  const [dash, alerts] = await Promise.all([
+    fetch(API+'/dashboard').then(r=>r.json()),
+    fetch(API+'/risk_alerts').then(r=>r.json())
+  ]);
+  document.getElementById('d-projects').textContent = dash.total_projects;
+  document.getElementById('d-amount').textContent = fmt(dash.total_amount);
+  document.getElementById('d-delayed').textContent = dash.delayed_payments;
+  document.getElementById('d-unpaid').textContent = dash.unpaid_payments;
+
+  // Grade distribution
+  const gd = dash.grade_distribution;
+  const grades = ['AAA','AA','A','B','C'];
+  const maxG = Math.max(...Object.values(gd), 1);
+  document.getElementById('dash-grades').innerHTML = grades.map(g => `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <span style="width:36px;text-align:center" class="grade-${g}">${g}</span>
+      <div style="flex:1;background:var(--surface2);border-radius:4px;height:14px;overflow:hidden">
+        <div style="width:${(gd[g]||0)/maxG*100}%;height:100%;background:${g==='AAA'?'#3fb950':g==='AA'?'#4ade80':g==='A'?'#58a6ff':g==='B'?'#d29922':'#f85149'};border-radius:4px"></div>
+      </div>
+      <span style="width:20px;text-align:right;color:var(--muted);font-size:12px">${gd[g]||0}</span>
+    </div>`).join('');
+
+  // Payment chart
+  const total = dash.total_payments || 1;
+  document.getElementById('dash-payment-chart').innerHTML = `
+    <div style="display:flex;gap:8px;align-items:flex-end;height:80px;margin-bottom:8px">
+      <div style="display:flex;flex-direction:column;align-items:center;flex:1">
+        <div style="flex:1;width:100%;display:flex;align-items:flex-end">
+          <div style="width:100%;height:${dash.completed_payments/total*100}%;background:var(--green);border-radius:3px 3px 0 0;min-height:4px"></div>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px">完了</div>
+        <div style="font-size:12px;font-weight:600;color:var(--green)">${dash.completed_payments}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;flex:1">
+        <div style="flex:1;width:100%;display:flex;align-items:flex-end">
+          <div style="width:100%;height:${dash.delayed_payments/total*100}%;background:var(--yellow);border-radius:3px 3px 0 0;min-height:4px"></div>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px">遅延</div>
+        <div style="font-size:12px;font-weight:600;color:var(--yellow)">${dash.delayed_payments}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;flex:1">
+        <div style="flex:1;width:100%;display:flex;align-items:flex-end">
+          <div style="width:100%;height:${dash.unpaid_payments/total*100}%;background:var(--red);border-radius:3px 3px 0 0;min-height:4px"></div>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px">未払い</div>
+        <div style="font-size:12px;font-weight:600;color:var(--red)">${dash.unpaid_payments}</div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--muted)">総支払い ${dash.total_payments}件 / 未払い額 ${fmt(dash.unpaid_amount)}円</div>`;
+
+  // Recent alerts
+  const dashAlerts = document.getElementById('dash-alerts');
+  if (!alerts.length) {
+    dashAlerts.innerHTML = '<div class="empty">アラートなし</div>';
+  } else {
+    dashAlerts.innerHTML = alerts.slice(0, 3).map(a => alertHTML(a)).join('');
+  }
+
+  // Badge
+  const badge = document.getElementById('alert-badge');
+  if (alerts.length > 0) { badge.style.display = 'inline'; badge.textContent = alerts.length; }
+  else badge.style.display = 'none';
+}
+
+function alertHTML(a) {
+  const icon = a.severity === 'high' ? '🔴' : '🟡';
+  const extra = a.type === 'overdue' ? `<span class="badge badge-red">${fmt(a.amount)}円</span>` :
+                a.type === 'low_score' ? `<span class="badge badge-yellow">${a.grade}: ${Math.round(a.score)}点</span>` : '';
+  return `<div class="alert-item ${a.severity}">
+    <div class="alert-icon">${icon}</div>
+    <div style="flex:1">
+      <div class="alert-msg">${a.message}</div>
+      <div class="alert-meta">${extra}</div>
+    </div>
+  </div>`;
+}
+
+// ─── Projects ───
+async function loadProjects() {
+  const projects = await fetch(API+'/projects').then(r=>r.json());
+  const tbody = document.getElementById('projects-tbody');
+  if (!projects.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty">案件なし</td></tr>'; return; }
+  tbody.innerHTML = projects.map(p => `
+    <tr>
+      <td><code style="color:var(--accent);font-size:12px">${p.code}</code></td>
+      <td>${p.name}</td>
+      <td>¥${fmt(p.total_cost)}</td>
+      <td>${statusBadge(p.status)}</td>
+      <td style="font-size:12px;color:var(--muted)">${p.start_date||'—'} → ${p.end_date||'—'}</td>
+      <td>${p.company_name||'—'}</td>
+      <td><button class="btn btn-sm" onclick="showProjectDetail(${p.id})">詳細</button></td>
+    </tr>`).join('');
+}
+
+async function showProjectDetail(id) {
+  const p = await fetch(API+'/projects/'+id).then(r=>r.json());
+  const payHTML = p.payments && p.payments.length ? p.payments.map(pay => `
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1">
+        <div style="font-size:12px">${pay.payer_name} → ${pay.payee_name}</div>
+        <div style="font-size:11px;color:var(--muted)">¥${fmt(pay.amount)} / 予定: ${pay.scheduled_date||'—'}</div>
+      </div>
+      ${statusBadge(pay.status)}
+      ${pay.delay_days > 0 ? `<span style="font-size:11px;color:var(--red)">+${pay.delay_days}日</span>` : ''}
+    </div>`).join('') : '<div style="color:var(--muted);padding:12px 0">支払い記録なし</div>';
+
+  alert(`【${p.code}】${p.name}\n工事費: ¥${fmt(p.total_cost)}\nステータス: ${p.status}\n期間: ${p.start_date} → ${p.end_date}`);
+}
+
+async function createProject() {
+  const data = {
+    name: document.getElementById('p-name').value,
+    total_cost: Number(document.getElementById('p-cost').value),
+    start_date: document.getElementById('p-start').value || null,
+    end_date: document.getElementById('p-end').value || null,
+    company_id: Number(document.getElementById('p-company').value) || null,
+    status: document.getElementById('p-status').value
+  };
+  if (!data.name || !data.total_cost) { alert('案件名と工事費は必須です'); return; }
+  await fetch(API+'/projects', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+  closeModal('project-modal');
+  loadProjects();
+}
+
+// ─── Companies ───
+async function loadCompanies() {
+  const companies = await fetch(API+'/companies').then(r=>r.json());
+  const tbody = document.getElementById('companies-tbody');
+  tbody.innerHTML = companies.map(c => `
+    <tr>
+      <td><strong>${c.name}</strong></td>
+      <td><span class="tier-${c.tier}">${c.tier}</span></td>
+      <td>${gradeBadge(c.credit_grade)}</td>
+      <td>
+        <div style="font-weight:600">${Math.round(c.credit_score)}</div>
+        ${scoreBar(c.credit_score)}
+      </td>
+      <td>
+        <div>${c.payment_rate.toFixed(1)}%</div>
+        ${scoreBar(c.payment_rate)}
+      </td>
+      <td>
+        <div>${c.completion_rate.toFixed(1)}%</div>
+        ${scoreBar(c.completion_rate)}
+      </td>
+    </tr>`).join('');
+}
+
+async function createCompany() {
+  const data = {
+    name: document.getElementById('c-name').value,
+    tier: document.getElementById('c-tier').value,
+    payment_rate: Number(document.getElementById('c-payment-rate').value),
+    completion_rate: Number(document.getElementById('c-completion-rate').value)
+  };
+  if (!data.name) { alert('企業名は必須です'); return; }
+  await fetch(API+'/companies', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+  closeModal('company-modal');
+  loadCompanies();
+}
+
+// ─── Payments ───
+async function loadPayments() {
+  const payments = await fetch(API+'/payments').then(r=>r.json()).catch(()=>[]);
+  // Fetch all payments via projects
+  const projects = await fetch(API+'/projects').then(r=>r.json());
+  const allPayments = [];
+  for (const p of projects) {
+    const detail = await fetch(API+'/projects/'+p.id).then(r=>r.json());
+    if (detail.payments) allPayments.push(...detail.payments);
+  }
+  const tbody = document.getElementById('payments-tbody');
+  if (!allPayments.length) { tbody.innerHTML = '<tr><td colspan="9" class="empty">支払い記録なし</td></tr>'; return; }
+  tbody.innerHTML = allPayments.map(p => `
+    <tr>
+      <td style="font-size:12px"><code style="color:var(--muted)">${p.project_code||'—'}</code></td>
+      <td>${p.payer_name||'—'}</td>
+      <td>${p.payee_name||'—'}</td>
+      <td>¥${fmt(p.amount)}</td>
+      <td style="font-size:12px">${p.scheduled_date||'—'}</td>
+      <td style="font-size:12px">${p.actual_date||'—'}</td>
+      <td>${statusBadge(p.status)}</td>
+      <td style="color:${p.delay_days>0?'var(--red)':'var(--muted)'}">${p.delay_days > 0 ? p.delay_days+'日' : '—'}</td>
+      <td>
+        ${p.status === '未払い' ? `<button class="btn btn-sm btn-success" onclick="completePayment(${p.id})">完了</button>` : ''}
+      </td>
+    </tr>`).join('');
+}
+
+async function completePayment(id) {
+  if (!confirm('この支払いを完了処理しますか？')) return;
+  await fetch(API+'/payments/'+id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'完了'}) });
+  loadPayments();
+  loadDashboard();
+}
+
+async function createPayment() {
+  const data = {
+    project_id: Number(document.getElementById('pay-project').value) || null,
+    payer_id: Number(document.getElementById('pay-payer').value),
+    payee_id: Number(document.getElementById('pay-payee').value),
+    amount: Number(document.getElementById('pay-amount').value),
+    scheduled_date: document.getElementById('pay-date').value || null
+  };
+  if (!data.payer_id || !data.payee_id || !data.amount) { alert('必須項目を入力してください'); return; }
+  await fetch(API+'/payments', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+  closeModal('payment-modal');
+  loadPayments();
+}
+
+// ─── Alerts ───
+async function loadAlerts() {
+  const alerts = await fetch(API+'/risk_alerts').then(r=>r.json());
+  const el = document.getElementById('alerts-list');
+  if (!alerts.length) { el.innerHTML = '<div class="empty" style="padding:60px">⚡ リスクアラートなし</div>'; return; }
+  el.innerHTML = alerts.map(a => alertHTML(a)).join('');
+
+  const badge = document.getElementById('alert-badge');
+  badge.style.display = 'inline';
+  badge.textContent = alerts.length;
+}
+
+// ─── Populate Selects ───
+async function populateSelects() {
+  const [companies, projects] = await Promise.all([
+    fetch(API+'/companies').then(r=>r.json()),
+    fetch(API+'/projects').then(r=>r.json())
+  ]);
+  const opts = companies.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  document.getElementById('p-company').innerHTML = opts;
+  document.getElementById('pay-payer').innerHTML = opts;
+  document.getElementById('pay-payee').innerHTML = opts;
+  document.getElementById('pay-project').innerHTML = projects.map(p => `<option value="${p.id}">${p.code} - ${p.name}</option>`).join('');
+}
+
+// ─── Auth ───
+let currentUser = null;
+
+async function initAuth() {
+  const res = await fetch(API.replace('/api', '') + '/api/auth/me', { credentials: 'include' });
+  if (res.status === 401) { location.href = '/login'; return; }
+  const data = await res.json();
+  currentUser = data.user;
+  document.getElementById('user-email').textContent = currentUser.email;
+  document.getElementById('user-company').textContent = currentUser.company_name || '未所属';
+  const badge = document.getElementById('user-role-badge');
+  badge.textContent = currentUser.role === 'admin' ? 'admin' : 'member';
+  const roleClass = currentUser.role === 'superadmin' ? 'role-superadmin' : currentUser.role === 'admin' ? 'role-admin' : 'role-member';
+  badge.className = 'user-role-badge ' + roleClass;
+  if (currentUser.role === 'superadmin') document.getElementById('nav-admin').style.display = 'flex';
+}
+
+async function doLogout() {
+  await fetch(API.replace('/api', '') + '/api/auth/logout', { method: 'POST', credentials: 'include' });
+  location.href = '/login';
+}
+
+// Intercept 401 from any fetch
+const _origFetch = window.fetch;
+window.fetch = async function(...args) {
+  // add credentials to all API calls
+  if (args[1]) args[1].credentials = 'include';
+  else if (typeof args[0] === 'string' && args[0].startsWith(API)) args[1] = { credentials: 'include' };
+  const res = await _origFetch(...args);
+  if (res.status === 401) { location.href = '/login'; }
+  return res;
+};
+
+// ─── Init ───
+initAuth().then(() => loadDashboard());
+</script>
+</body>
+</html>

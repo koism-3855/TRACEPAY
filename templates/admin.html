@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理画面 — TRACE PAY</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --surface2: #21262d;
+    --border: #30363d; --text: #e6edf3; --muted: #8b949e;
+    --accent: #58a6ff; --green: #3fb950; --yellow: #d29922;
+    --red: #f85149; --orange: #db6d28; --purple: #bc8cff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; }
+
+  .app { display: flex; height: 100vh; overflow: hidden; }
+
+  /* Sidebar */
+  .sidebar { width: 220px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+  .sidebar-logo { padding: 20px 16px; border-bottom: 1px solid var(--border); }
+  .sidebar-logo h1 { font-size: 18px; font-weight: 700; color: var(--purple); letter-spacing: 2px; }
+  .sidebar-logo small { color: var(--muted); font-size: 11px; }
+  .sidebar-nav { padding: 8px 0; flex: 1; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; cursor: pointer; color: var(--muted); transition: all 0.15s; border-left: 3px solid transparent; }
+  .nav-item:hover { color: var(--text); background: var(--surface2); }
+  .nav-item.active { color: var(--purple); border-left-color: var(--purple); background: rgba(188,140,255,0.08); }
+  .sidebar-user { padding: 12px 16px; border-top: 1px solid var(--border); }
+  .user-email { font-size: 12px; color: var(--text); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 8px; }
+  .btn-logout { width: 100%; padding: 7px; background: var(--surface2); border: 1px solid var(--border); color: var(--muted); border-radius: 6px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 6px; transition: all 0.15s; }
+  .btn-logout:hover { color: var(--red); border-color: var(--red); background: rgba(248,81,73,0.08); }
+
+  /* Main */
+  .main { flex: 1; overflow-y: auto; }
+  .section { display: none; padding: 24px; }
+  .section.active { display: block; }
+
+  /* Header */
+  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  .page-title { font-size: 20px; font-weight: 600; }
+  .page-subtitle { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+  /* KPI Cards */
+  .cards { display: grid; gap: 16px; }
+  .cards-4 { grid-template-columns: repeat(4, 1fr); }
+  .cards-3 { grid-template-columns: repeat(3, 1fr); }
+  .cards-2 { grid-template-columns: repeat(2, 1fr); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
+  .card-title { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .card-value { font-size: 26px; font-weight: 700; }
+  .card-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .card-purple { border-top: 3px solid var(--purple); }
+  .card-blue { border-top: 3px solid var(--accent); }
+  .card-green { border-top: 3px solid var(--green); }
+  .card-red { border-top: 3px solid var(--red); }
+  .card-yellow { border-top: 3px solid var(--yellow); }
+
+  /* Table */
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-top: 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: var(--surface2); padding: 10px 14px; text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+  td { padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+
+  /* Badges */
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .badge-superadmin { background: rgba(188,140,255,0.15); color: var(--purple); }
+  .badge-admin { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .badge-member { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge-active { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge-suspended { background: rgba(248,81,73,0.15); color: var(--red); }
+  .badge-green { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge-yellow { background: rgba(210,153,34,0.15); color: var(--yellow); }
+  .badge-red { background: rgba(248,81,73,0.15); color: var(--red); }
+  .badge-blue { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .grade-AAA { color: var(--green); font-weight: 700; }
+  .grade-AA { color: #4ade80; font-weight: 700; }
+  .grade-A { color: var(--accent); font-weight: 700; }
+  .grade-B { color: var(--yellow); font-weight: 700; }
+  .grade-C { color: var(--red); font-weight: 700; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); cursor: pointer; font-size: 13px; transition: all 0.15s; }
+  .btn:hover { background: var(--border); }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+  .btn-primary { background: var(--purple); border-color: var(--purple); color: #fff; font-weight: 600; }
+  .btn-primary:hover { opacity: 0.85; }
+  .btn-danger { background: rgba(248,81,73,0.1); border-color: var(--red); color: var(--red); }
+  .btn-danger:hover { background: rgba(248,81,73,0.2); }
+  .btn-success { background: rgba(63,185,80,0.1); border-color: var(--green); color: var(--green); }
+  .btn-export { background: rgba(88,166,255,0.1); border-color: var(--accent); color: var(--accent); }
+
+  /* Export section */
+  .export-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 16px; }
+  .export-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+  .export-card h3 { font-size: 14px; font-weight: 600; }
+  .export-card p { font-size: 12px; color: var(--muted); flex: 1; }
+
+  /* Invite form */
+  .invite-form { display: flex; gap: 10px; align-items: flex-end; margin-top: 16px; }
+  .invite-form input { flex: 1; background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 9px 14px; border-radius: 6px; font-size: 13px; }
+  .invite-form input:focus { outline: none; border-color: var(--purple); }
+  .invite-result { margin-top: 12px; padding: 12px 14px; border-radius: 8px; font-size: 13px; display: none; }
+  .invite-result.ok { background: rgba(63,185,80,0.1); border: 1px solid rgba(63,185,80,0.3); color: var(--green); }
+  .invite-result.err { background: rgba(248,81,73,0.1); border: 1px solid rgba(248,81,73,0.3); color: var(--red); }
+
+  /* Score bar */
+  .score-bar { background: var(--surface2); border-radius: 3px; height: 5px; margin-top: 3px; overflow: hidden; width: 80px; }
+  .score-fill { height: 100%; border-radius: 3px; }
+
+  /* Toast */
+  .toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 18px; font-size: 13px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); z-index: 200; display: none; }
+  .toast.show { display: block; }
+
+  .mt-24 { margin-top: 24px; }
+  .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .section-title { font-size: 16px; font-weight: 600; }
+  .empty { text-align: center; padding: 40px; color: var(--muted); }
+
+  /* Role select */
+  select.role-select { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 3px 8px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+  select.role-select:focus { outline: none; border-color: var(--purple); }
+
+  .tier-元請 { color: var(--accent); }
+  .tier-下請 { color: var(--purple); }
+  .tier-孫請 { color: var(--orange); }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <h1>TRACE PAY</h1>
+      <small>⚙ 管理画面 / superadmin</small>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-item active" onclick="showSection('overview', this)">
+        <span>◉</span> 全体統計
+      </div>
+      <div class="nav-item" onclick="showSection('users', this)">
+        <span>◈</span> ユーザー管理
+      </div>
+      <div class="nav-item" onclick="showSection('companies', this)">
+        <span>◆</span> 信用スコア一覧
+      </div>
+      <div class="nav-item" onclick="showSection('projects', this)">
+        <span>⊟</span> 案件一覧
+      </div>
+      <div class="nav-item" onclick="showSection('export', this)">
+        <span>↓</span> CSVエクスポート
+      </div>
+      <div class="nav-item" style="margin-top:8px;border-top:1px solid var(--border);padding-top:16px" onclick="location.href='/'">
+        <span>←</span> メイン画面へ
+      </div>
+    </div>
+    <div class="sidebar-user">
+      <div class="user-email" id="admin-email">—</div>
+      <button class="btn-logout" onclick="doLogout()">⎋ ログアウト</button>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- Overview -->
+    <div id="section-overview" class="section active">
+      <div class="page-header">
+        <div>
+          <div class="page-title">全体統計ダッシュボード</div>
+          <div class="page-subtitle">全社データの集計・概要</div>
+        </div>
+        <button class="btn" onclick="loadStats()">↻ 更新</button>
+      </div>
+      <div class="cards cards-4" id="stats-kpi">
+        <div class="card card-purple"><div class="card-title">総ユーザー数</div><div class="card-value" id="s-users">—</div></div>
+        <div class="card card-blue"><div class="card-title">総案件数</div><div class="card-value" id="s-projects">—</div></div>
+        <div class="card card-red"><div class="card-title">総未払い額</div><div class="card-value" id="s-unpaid">—</div></div>
+        <div class="card card-green"><div class="card-title">平均信用スコア</div><div class="card-value" id="s-score">—</div></div>
+      </div>
+      <div class="cards cards-3 mt-24">
+        <div class="card">
+          <div class="card-title">アクティブ案件</div>
+          <div class="card-value" id="s-active-projects" style="color:var(--accent)">—</div>
+          <div class="card-sub">進行中の案件数</div>
+        </div>
+        <div class="card">
+          <div class="card-title">登録企業数</div>
+          <div class="card-value" id="s-companies" style="color:var(--purple)">—</div>
+          <div class="card-sub">元請・下請・孫請合計</div>
+        </div>
+        <div class="card">
+          <div class="card-title">アクティブユーザー</div>
+          <div class="card-value" id="s-active-users" style="color:var(--green)">—</div>
+          <div class="card-sub">停止済みを除く</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Users -->
+    <div id="section-users" class="section">
+      <div class="page-header">
+        <div>
+          <div class="page-title">ユーザー管理</div>
+          <div class="page-subtitle">ユーザーの停止・ロール変更・招待</div>
+        </div>
+        <button class="btn" onclick="loadUsers()">↻ 更新</button>
+      </div>
+
+      <!-- Invite -->
+      <div class="card">
+        <div class="section-title">招待メール送信</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">メールアドレスを入力して招待リンクを発行します</div>
+        <div class="invite-form">
+          <input type="email" id="invite-email" placeholder="invite@company.jp">
+          <button class="btn btn-primary" onclick="sendInvite()">招待を送る</button>
+        </div>
+        <div id="invite-result" class="invite-result"></div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>メール</th><th>ロール</th><th>所属企業</th><th>ステータス</th><th>登録日</th><th>操作</th></tr>
+          </thead>
+          <tbody id="users-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Companies -->
+    <div id="section-companies" class="section">
+      <div class="page-header">
+        <div>
+          <div class="page-title">信用スコア一覧（全社）</div>
+          <div class="page-subtitle">全登録企業の信用グレード・スコア</div>
+        </div>
+      </div>
+      <div class="table-wrap" style="margin-top:0">
+        <table>
+          <thead>
+            <tr><th>企業名</th><th>区分</th><th>グレード</th><th>スコア</th><th>支払い完了率</th><th>完遂率</th></tr>
+          </thead>
+          <tbody id="admin-companies-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Projects -->
+    <div id="section-projects" class="section">
+      <div class="page-header">
+        <div>
+          <div class="page-title">案件一覧（全社）</div>
+          <div class="page-subtitle">全登録案件・支払い状況</div>
+        </div>
+      </div>
+      <div class="table-wrap" style="margin-top:0">
+        <table>
+          <thead>
+            <tr><th>案件コード</th><th>案件名</th><th>総工事費</th><th>ステータス</th><th>期間</th><th>元請企業</th></tr>
+          </thead>
+          <tbody id="admin-projects-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Export -->
+    <div id="section-export" class="section">
+      <div class="page-header">
+        <div>
+          <div class="page-title">CSVエクスポート</div>
+          <div class="page-subtitle">全データをCSV形式でダウンロード（BOM付きUTF-8）</div>
+        </div>
+      </div>
+      <div class="export-grid">
+        <div class="export-card">
+          <h3>案件データ</h3>
+          <p>全案件の案件コード・名称・工事費・ステータス・期間・元請企業を含むCSV</p>
+          <a href="/api/admin/export/projects" class="btn btn-export" style="text-decoration:none;justify-content:center">
+            ↓ projects.csv
+          </a>
+        </div>
+        <div class="export-card">
+          <h3>支払いデータ</h3>
+          <p>全支払い記録の支払元・支払先・金額・予定日・実績日・ステータス・遅延日数を含むCSV</p>
+          <a href="/api/admin/export/payments" class="btn btn-export" style="text-decoration:none;justify-content:center">
+            ↓ payments.csv
+          </a>
+        </div>
+        <div class="export-card">
+          <h3>信用スコアデータ</h3>
+          <p>全企業の信用グレード・スコア・支払い完了率・完遂率を含むCSV</p>
+          <a href="/api/admin/export/companies" class="btn btn-export" style="text-decoration:none;justify-content:center">
+            ↓ companies.csv
+          </a>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const API = '/api';
+
+function showSection(id, el) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('section-' + id).classList.add('active');
+  if (el) el.classList.add('active');
+  if (id === 'overview') loadStats();
+  if (id === 'users') loadUsers();
+  if (id === 'companies') loadAdminCompanies();
+  if (id === 'projects') loadAdminProjects();
+}
+
+function toast(msg, ok = true) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.borderColor = ok ? 'var(--green)' : 'var(--red)';
+  el.style.color = ok ? 'var(--green)' : 'var(--red)';
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+function fmt(n) {
+  if (n >= 100000000) return (n/100000000).toFixed(1) + '億';
+  if (n >= 10000) return Math.round(n/10000) + '万';
+  return n.toLocaleString();
+}
+
+function statusBadge(s) {
+  const m = {'完了':'badge-green','遅延':'badge-yellow','未払い':'badge-red','進行中':'badge-blue','中断':'badge-suspended'};
+  return `<span class="badge ${m[s]||'badge-blue'}">${s}</span>`;
+}
+
+// ─── Auth check ───
+async function initAdmin() {
+  const res = await fetch(API + '/auth/me', { credentials: 'include' });
+  if (res.status === 401) { location.href = '/login'; return; }
+  const { user } = await res.json();
+  if (user.role !== 'superadmin') { location.href = '/'; return; }
+  document.getElementById('admin-email').textContent = user.email;
+  loadStats();
+}
+
+async function doLogout() {
+  await fetch(API + '/auth/logout', { method: 'POST', credentials: 'include' });
+  location.href = '/login';
+}
+
+// ─── Stats ───
+async function loadStats() {
+  const d = await fetch(API + '/admin/stats', { credentials: 'include' }).then(r => r.json());
+  document.getElementById('s-users').textContent = d.total_users;
+  document.getElementById('s-projects').textContent = d.total_projects;
+  document.getElementById('s-unpaid').textContent = '¥' + fmt(d.unpaid_amount);
+  document.getElementById('s-score').textContent = d.avg_credit_score;
+  document.getElementById('s-active-projects').textContent = d.active_projects;
+  document.getElementById('s-companies').textContent = d.total_companies;
+  document.getElementById('s-active-users').textContent = d.active_users;
+}
+
+// ─── Users ───
+async function loadUsers() {
+  const users = await fetch(API + '/admin/users', { credentials: 'include' }).then(r => r.json());
+  const tbody = document.getElementById('users-tbody');
+  if (!users.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty">ユーザーなし</td></tr>'; return; }
+  tbody.innerHTML = users.map(u => `
+    <tr id="user-row-${u.id}">
+      <td>
+        <div style="font-weight:500">${escHtml(u.email)}</div>
+      </td>
+      <td>
+        <select class="role-select" onchange="changeRole(${u.id}, this.value)">
+          <option value="superadmin" ${u.role==='superadmin'?'selected':''}>superadmin</option>
+          <option value="admin" ${u.role==='admin'?'selected':''}>admin</option>
+          <option value="member" ${u.role==='member'?'selected':''}>member</option>
+        </select>
+      </td>
+      <td>${escHtml(u.company_name || '—')}</td>
+      <td>
+        <span class="badge ${u.is_active ? 'badge-active' : 'badge-suspended'}">
+          ${u.is_active ? 'アクティブ' : '停止中'}
+        </span>
+      </td>
+      <td style="font-size:12px;color:var(--muted)">${u.created_at ? u.created_at.slice(0,10) : '—'}</td>
+      <td>
+        <button class="btn btn-sm ${u.is_active ? 'btn-danger' : 'btn-success'}"
+          onclick="toggleSuspend(${u.id}, ${u.is_active})">
+          ${u.is_active ? '停止' : '再開'}
+        </button>
+      </td>
+    </tr>`).join('');
+}
+
+async function toggleSuspend(uid, isActive) {
+  const action = isActive ? '停止' : '再開';
+  if (!confirm(`このユーザーを${action}しますか？`)) return;
+  const res = await fetch(`${API}/admin/users/${uid}/suspend`, {
+    method: 'PATCH', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' }, body: '{}'
+  });
+  const data = await res.json();
+  if (!res.ok) { toast(data.error || 'エラーが発生しました', false); return; }
+  toast(`ユーザーを${action}しました`);
+  loadUsers();
+}
+
+async function changeRole(uid, newRole) {
+  const res = await fetch(`${API}/admin/users/${uid}/role`, {
+    method: 'PATCH', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role: newRole })
+  });
+  const data = await res.json();
+  if (!res.ok) { toast(data.error || 'エラーが発生しました', false); return; }
+  toast(`ロールを ${newRole} に変更しました`);
+}
+
+// ─── Invite ───
+async function sendInvite() {
+  const email = document.getElementById('invite-email').value.trim();
+  const resultEl = document.getElementById('invite-result');
+  resultEl.style.display = 'none';
+  if (!email) { showInviteResult('メールアドレスを入力してください', false); return; }
+  const res = await fetch(`${API}/admin/invite`, {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email })
+  });
+  const data = await res.json();
+  if (!res.ok) { showInviteResult(data.error || 'エラーが発生しました', false); return; }
+  showInviteResult(`${data.message}\n招待URL: ${data.invite_url}`, true);
+  document.getElementById('invite-email').value = '';
+}
+
+function showInviteResult(msg, ok) {
+  const el = document.getElementById('invite-result');
+  el.textContent = msg;
+  el.className = 'invite-result ' + (ok ? 'ok' : 'err');
+  el.style.display = 'block';
+}
+
+// ─── Companies ───
+async function loadAdminCompanies() {
+  const companies = await fetch(API + '/companies', { credentials: 'include' }).then(r => r.json());
+  const tbody = document.getElementById('admin-companies-tbody');
+  tbody.innerHTML = companies.map(c => {
+    const color = c.credit_score >= 80 ? '#3fb950' : c.credit_score >= 60 ? '#58a6ff' : c.credit_score >= 40 ? '#d29922' : '#f85149';
+    return `<tr>
+      <td><strong>${escHtml(c.name)}</strong></td>
+      <td><span class="tier-${c.tier}">${c.tier}</span></td>
+      <td><span class="grade-${c.credit_grade}">${c.credit_grade}</span></td>
+      <td>
+        <div style="font-weight:600">${Math.round(c.credit_score)}</div>
+        <div class="score-bar"><div class="score-fill" style="width:${c.credit_score}%;background:${color}"></div></div>
+      </td>
+      <td>${c.payment_rate.toFixed(1)}%</td>
+      <td>${c.completion_rate.toFixed(1)}%</td>
+    </tr>`;
+  }).join('');
+}
+
+// ─── Projects ───
+async function loadAdminProjects() {
+  const projects = await fetch(API + '/projects', { credentials: 'include' }).then(r => r.json());
+  const tbody = document.getElementById('admin-projects-tbody');
+  if (!projects.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty">案件なし</td></tr>'; return; }
+  tbody.innerHTML = projects.map(p => `
+    <tr>
+      <td><code style="color:var(--accent);font-size:12px">${escHtml(p.code)}</code></td>
+      <td>${escHtml(p.name)}</td>
+      <td>¥${fmt(p.total_cost)}</td>
+      <td>${statusBadge(p.status)}</td>
+      <td style="font-size:12px;color:var(--muted)">${p.start_date||'—'} → ${p.end_date||'—'}</td>
+      <td>${escHtml(p.company_name||'—')}</td>
+    </tr>`).join('');
+}
+
+function escHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+initAdmin();
+</script>
+</body>
+</html>

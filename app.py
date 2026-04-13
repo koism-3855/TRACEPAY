@@ -768,13 +768,13 @@ def get_email_logs():
 @app.route('/api/emails/test', methods=['POST'])
 @admin_required
 def test_send_email():
-    data = request.json
-    recipient = data.get('recipient', '').strip()
-    if not recipient:
-        return jsonify({'error': '送信先メールアドレスを指定してください'}), 400
-    if not app.config.get('MAIL_USERNAME'):
-        return jsonify({'error': 'MAIL_USERNAME が未設定です'}), 400
     try:
+        data = request.get_json(force=True, silent=True) or {}
+        recipient = (data.get('recipient') or '').strip()
+        if not recipient:
+            return jsonify({'error': '送信先メールアドレスを指定してください'}), 400
+        if not app.config.get('MAIL_USERNAME'):
+            return jsonify({'error': 'MAIL_USERNAME が未設定です'}), 400
         msg = Message(
             subject='【TRACE PAY】テスト送信',
             recipients=[recipient],

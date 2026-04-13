@@ -74,7 +74,23 @@ class User(UserMixin, db.Model):
 class Company(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    tier = db.Column(db.String(20), nullable=False)  # 元請/下請/孫請
+    tier = db.Column(db.String(20), nullable=False)        # 元請/下請/孫請
+    email = db.Column(db.String(120))                      # 催促メール送信先
+    # ── 基本情報 ──
+    representative = db.Column(db.String(100))             # 代表者名
+    phone = db.Column(db.String(30))                       # 電話番号
+    address = db.Column(db.String(200))                    # 住所
+    # ── 建設業情報 ──
+    license_number = db.Column(db.String(50))              # 建設業許可番号
+    main_work_type = db.Column(db.String(200))             # 主要工種
+    established_year = db.Column(db.Integer)               # 設立年
+    capital = db.Column(db.Integer)                        # 資本金（万円）
+    employees = db.Column(db.Integer)                      # 従業員数
+    # ── 取引条件 ──
+    payment_cycle = db.Column(db.Integer)                  # 支払いサイト（日）
+    credit_limit = db.Column(db.Float)                     # 与信限度額（円）
+    keishin_score = db.Column(db.Integer)                  # 経営事項審査P点
+    # ── 信用スコア（自動計算） ──
     credit_score = db.Column(db.Float, default=100.0)
     credit_grade = db.Column(db.String(5), default='AAA')
     payment_rate = db.Column(db.Float, default=100.0)
@@ -86,6 +102,18 @@ class Company(db.Model):
             'id': self.id,
             'name': self.name,
             'tier': self.tier,
+            'email': self.email or '',
+            'representative': self.representative or '',
+            'phone': self.phone or '',
+            'address': self.address or '',
+            'license_number': self.license_number or '',
+            'main_work_type': self.main_work_type or '',
+            'established_year': self.established_year,
+            'capital': self.capital,
+            'employees': self.employees,
+            'payment_cycle': self.payment_cycle,
+            'credit_limit': self.credit_limit,
+            'keishin_score': self.keishin_score,
             'credit_score': round(self.credit_score, 2),
             'credit_grade': self.credit_grade,
             'payment_rate': round(self.payment_rate, 2),
@@ -101,6 +129,8 @@ class Project(db.Model):
     status = db.Column(db.String(20), default='進行中')
     start_date = db.Column(db.Date)
     end_date = db.Column(db.Date)
+    invoice_date = db.Column(db.Date)      # 請求日
+    transfer_date = db.Column(db.Date)     # 振込み日
     company_id = db.Column(db.Integer, db.ForeignKey('company.id'))
     company = db.relationship('Company', backref='projects')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -114,6 +144,8 @@ class Project(db.Model):
             'status': self.status,
             'start_date': self.start_date.isoformat() if self.start_date else None,
             'end_date': self.end_date.isoformat() if self.end_date else None,
+            'invoice_date': self.invoice_date.isoformat() if self.invoice_date else None,
+            'transfer_date': self.transfer_date.isoformat() if self.transfer_date else None,
             'company_id': self.company_id,
             'company_name': self.company.name if self.company else None,
             'created_at': self.created_at.isoformat()
@@ -427,10 +459,31 @@ def api_register():
         return jsonify({'error': 'パスワードは6文字以上で設定してください'}), 400
     if User.query.filter_by(email=email).first():
         return jsonify({'error': 'このメールアドレスはすでに登録されています'}), 409
-    company_id = data.get('company_id')
-    # First user ever becomes admin
+
+    company_id = data.get('company_id') or None
+
+    # 新規会社を同時作成する場合
+    new_company_data = data.get('new_company')
+    if new_company_data:
+        company_name = new_company_data.get('name', '').strip()
+        company_tier = new_company_data.get('tier', '元請')
+        if not company_name:
+            return jsonify({'error': '会社名を入力してください'}), 400
+        new_company = Company(
+            name=company_name,
+            tier=company_tier,
+            credit_score=100.0,
+            credit_grade='AAA',
+            payment_rate=100.0,
+            completion_rate=100.0
+        )
+        db.session.add(new_company)
+        db.session.flush()  # IDを確定させる
+        company_id = new_company.id
+
+    # 最初のユーザーは admin、以降は member
     role = 'admin' if User.query.count() == 0 else 'member'
-    user = User(email=email, role=role, company_id=company_id or None)
+    user = User(email=email, role=role, company_id=company_id)
     user.set_password(password)
     db.session.add(user)
     db.session.commit()
@@ -480,9 +533,17 @@ def create_project():
         status=data.get('status', '進行中'),
         start_date=datetime.strptime(data['start_date'], '%Y-%m-%d').date() if data.get('start_date') else None,
         end_date=datetime.strptime(data['end_date'], '%Y-%m-%d').date() if data.get('end_date') else None,
+        invoice_date=datetime.strptime(data['invoice_date'], '%Y-%m-%d').date() if data.get('invoice_date') else None,
+        transfer_date=datetime.strptime(data['transfer_date'], '%Y-%m-%d').date() if data.get('transfer_date') else None,
         company_id=company_id
     )
     db.session.add(project)
+    # 会社のメールアドレスを更新（入力された場合）
+    payee_email = data.get('payee_email', '').strip()
+    if payee_email and company_id:
+        company = Company.query.get(company_id)
+        if company:
+            company.email = payee_email
     db.session.commit()
     return jsonify(project.to_dict()), 201
 
@@ -503,18 +564,47 @@ def get_companies():
     return jsonify([c.to_dict() for c in companies])
 
 @app.route('/api/companies', methods=['POST'])
-@admin_required
+@api_login_required
 def create_company():
     data = request.json
+    if not data.get('name'):
+        return jsonify({'error': '企業名は必須です'}), 400
+    if not data.get('email', '').strip():
+        return jsonify({'error': 'メールアドレスは必須です'}), 400
     company = Company(
         name=data['name'],
-        tier=data['tier'],
+        tier=data.get('tier', '元請'),
+        email=data.get('email', '').strip() or None,
         payment_rate=data.get('payment_rate', 100.0),
         completion_rate=data.get('completion_rate', 100.0)
     )
     db.session.add(company)
     db.session.commit()
     return jsonify(company.to_dict()), 201
+
+@app.route('/api/companies/<int:cid>', methods=['PATCH'])
+@api_login_required
+def update_company(cid):
+    """会社情報を更新する"""
+    company = Company.query.get_or_404(cid)
+    data = request.json
+    str_fields = ['name', 'tier', 'email', 'representative', 'phone', 'address',
+                  'license_number', 'main_work_type']
+    int_fields = ['established_year', 'capital', 'employees', 'payment_cycle', 'keishin_score']
+    float_fields = ['credit_limit']
+    for f in str_fields:
+        if f in data:
+            setattr(company, f, data[f].strip() or None)
+    for f in int_fields:
+        if f in data:
+            setattr(company, f, int(data[f]) if data[f] not in (None, '', 0) else None)
+    for f in float_fields:
+        if f in data:
+            setattr(company, f, float(data[f]) if data[f] not in (None, '') else None)
+    if not company.name:
+        return jsonify({'error': '企業名は必須です'}), 400
+    db.session.commit()
+    return jsonify(company.to_dict())
 
 @app.route('/api/companies/<int:cid>', methods=['GET'])
 @api_login_required
@@ -526,12 +616,21 @@ def get_company(cid):
 @api_login_required
 def create_payment():
     data = request.json
+    # payee_email: フォーム入力 → 会社登録メール → None の優先順位
+    payee_email = data.get('payee_email', '').strip() or None
+    if not payee_email and data.get('payee_id'):
+        payee_company = Company.query.get(data['payee_id'])
+        if payee_company and payee_company.email:
+            payee_email = payee_company.email
     payment = Payment(
         project_id=data.get('project_id'),
         payer_id=data['payer_id'],
         payee_id=data['payee_id'],
         amount=data['amount'],
         scheduled_date=datetime.strptime(data['scheduled_date'], '%Y-%m-%d').date() if data.get('scheduled_date') else None,
+        invoice_date=datetime.strptime(data['invoice_date'], '%Y-%m-%d').date() if data.get('invoice_date') else None,
+        due_date=datetime.strptime(data['due_date'], '%Y-%m-%d').date() if data.get('due_date') else None,
+        payee_email=payee_email,
         status=data.get('status', '未払い')
     )
     db.session.add(payment)
@@ -811,12 +910,14 @@ def admin_export_projects():
     projects = Project.query.order_by(Project.created_at.desc()).all()
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(['案件コード', '案件名', '総工事費', 'ステータス', '開始日', '終了日', '元請企業', '登録日'])
+    writer.writerow(['案件コード', '案件名', '総工事費', 'ステータス', '開始日', '終了日', '請求日', '振込み日', '元請企業', '登録日'])
     for p in projects:
         writer.writerow([
             p.code, p.name, p.total_cost, p.status,
             p.start_date.isoformat() if p.start_date else '',
             p.end_date.isoformat() if p.end_date else '',
+            p.invoice_date.isoformat() if p.invoice_date else '',
+            p.transfer_date.isoformat() if p.transfer_date else '',
             p.company.name if p.company else '',
             p.created_at.strftime('%Y-%m-%d'),
         ])

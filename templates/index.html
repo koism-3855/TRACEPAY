@@ -102,6 +102,7 @@
   .modal-bg.open { display: flex; }
   .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 24px; width: 480px; max-width: 95vw; }
   .modal h3 { margin-bottom: 20px; font-size: 16px; }
+  .section-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
   .form-group { margin-bottom: 16px; }
   label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
   input, select { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; font-size: 13px; }
@@ -161,7 +162,7 @@
         <span class="nav-icon">⊟</span> 案件管理
       </div>
       <div class="nav-item" onclick="showPage('companies')">
-        <span class="nav-icon">◈</span> 企業スコア
+        <span class="nav-icon">◈</span> 企業一覧
       </div>
       <div class="nav-item" onclick="showPage('payments')">
         <span class="nav-icon">⊕</span> 支払い追跡
@@ -241,7 +242,7 @@
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>案件コード</th><th>案件名</th><th>総工事費</th><th>ステータス</th><th>期間</th><th>元請企業</th><th>操作</th></tr>
+            <tr><th>案件コード</th><th>案件名</th><th>総工事費</th><th>ステータス</th><th>期間</th><th>請求日</th><th>振込み日</th><th>元請企業</th><th>操作</th></tr>
           </thead>
           <tbody id="projects-tbody"></tbody>
         </table>
@@ -252,15 +253,15 @@
     <div id="page-companies" class="page">
       <div class="page-header">
         <div>
-          <div class="page-title">企業スコア</div>
-          <div class="page-subtitle">信用スコア・グレード管理</div>
+          <div class="page-title">企業一覧</div>
+          <div class="page-subtitle">登録企業・信用スコア・グレード管理</div>
         </div>
-        <button class="btn btn-primary" onclick="openModal('company-modal')">＋ 企業追加</button>
+        <button class="btn btn-primary" onclick="openNewCompany()">＋ 企業登録</button>
       </div>
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>企業名</th><th>区分</th><th>信用グレード</th><th>スコア</th><th>支払い完了率</th><th>完遂率</th></tr>
+            <tr><th>企業名</th><th>区分</th><th>建設業許可番号</th><th>メールアドレス</th><th>信用グレード</th><th>スコア</th><th>支払い完了率</th><th>完遂率</th><th>操作</th></tr>
           </thead>
           <tbody id="companies-tbody"></tbody>
         </table>
@@ -279,7 +280,7 @@
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>案件</th><th>支払元</th><th>支払先</th><th>金額</th><th>予定日</th><th>実績日</th><th>ステータス</th><th>遅延日数</th><th>操作</th></tr>
+            <tr><th>案件</th><th>支払元</th><th>支払先</th><th>金額</th><th>振込み期日</th><th>予定日</th><th>実績日</th><th>ステータス</th><th>遅延日数</th><th>✉メール</th><th>操作</th></tr>
           </thead>
           <tbody id="payments-tbody"></tbody>
         </table>
@@ -349,9 +350,23 @@
         <input type="date" id="p-end">
       </div>
     </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>請求日</label>
+        <input type="date" id="p-invoice">
+      </div>
+      <div class="form-group">
+        <label>振込み日</label>
+        <input type="date" id="p-transfer">
+      </div>
+    </div>
     <div class="form-group">
       <label>元請企業</label>
-      <select id="p-company"></select>
+      <select id="p-company" onchange="fillCompanyEmail()"></select>
+    </div>
+    <div class="form-group">
+      <label>元請企業のメールアドレス <span style="color:var(--muted);font-size:10px">（企業一覧に保存・催促メール送信先）</span></label>
+      <input type="email" id="p-payee-email" placeholder="contact@company.co.jp">
     </div>
     <div class="form-group">
       <label>ステータス</label>
@@ -366,33 +381,102 @@
   </div>
 </div>
 
-<!-- Company Modal -->
+<!-- Company Modal (新規登録 / 編集 共用) -->
 <div id="company-modal" class="modal-bg">
-  <div class="modal">
-    <h3>企業追加</h3>
-    <div class="form-group">
-      <label>企業名</label>
-      <input type="text" id="c-name" placeholder="例: 山田建設株式会社">
+  <div class="modal" style="max-width:560px;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h3 id="company-modal-title">企業情報登録</h3>
+      <!-- 編集時のみ表示される信用スコアバッジ -->
+      <div id="company-score-badge" style="display:none;text-align:right">
+        <div style="font-size:11px;color:var(--muted)">信用スコア</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span id="cm-grade-badge" style="font-size:18px;font-weight:800"></span>
+          <span id="cm-score-val" style="font-size:22px;font-weight:800;color:var(--accent)"></span>
+        </div>
+      </div>
     </div>
-    <div class="form-group">
-      <label>区分</label>
-      <select id="c-tier">
-        <option>元請</option><option>下請</option><option>孫請</option>
-      </select>
+    <input type="hidden" id="cm-id">
+
+    <!-- 基本情報 -->
+    <div class="section-label">📋 基本情報</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>企業名 <span style="color:var(--red)">*</span></label>
+        <input type="text" id="cm-name" placeholder="山田建設株式会社">
+      </div>
+      <div class="form-group">
+        <label>区分 <span style="color:var(--red)">*</span></label>
+        <select id="cm-tier">
+          <option>元請</option><option>下請</option><option>孫請</option>
+        </select>
+      </div>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label>支払い完了率（%）</label>
-        <input type="number" id="c-payment-rate" value="100" min="0" max="100">
+        <label>代表者名</label>
+        <input type="text" id="cm-representative" placeholder="山田 太郎">
       </div>
       <div class="form-group">
-        <label>完遂率（%）</label>
-        <input type="number" id="c-completion-rate" value="100" min="0" max="100">
+        <label>電話番号</label>
+        <input type="text" id="cm-phone" placeholder="03-1234-5678">
       </div>
     </div>
-    <div class="modal-actions">
+    <div class="form-group">
+      <label>住所</label>
+      <input type="text" id="cm-address" placeholder="東京都渋谷区○○1-2-3">
+    </div>
+    <div class="form-group">
+      <label>メールアドレス <span style="color:var(--red)">*</span> <span style="color:var(--red);font-size:10px">★催促メール送信先</span></label>
+      <input type="email" id="cm-email" placeholder="contact@company.co.jp">
+    </div>
+
+    <!-- 建設業情報 -->
+    <div class="section-label" style="margin-top:16px">🏗️ 建設業情報</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>建設業許可番号</label>
+        <input type="text" id="cm-license" placeholder="例: 東京都知事（般-5）第12345号">
+      </div>
+      <div class="form-group">
+        <label>経営事項審査（P点）</label>
+        <input type="number" id="cm-keishin" placeholder="例: 820">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>主要工種</label>
+      <input type="text" id="cm-work-type" placeholder="例: 建築一式工事、内装仕上工事">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>設立年</label>
+        <input type="number" id="cm-est-year" placeholder="例: 1985" min="1800" max="2100">
+      </div>
+      <div class="form-group">
+        <label>資本金（万円）</label>
+        <input type="number" id="cm-capital" placeholder="例: 1000">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>従業員数</label>
+      <input type="number" id="cm-employees" placeholder="例: 50">
+    </div>
+
+    <!-- 取引条件 -->
+    <div class="section-label" style="margin-top:16px">💴 取引条件</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>支払いサイト（日）</label>
+        <input type="number" id="cm-payment-cycle" placeholder="例: 30">
+      </div>
+      <div class="form-group">
+        <label>与信限度額（万円）</label>
+        <input type="number" id="cm-credit-limit" placeholder="例: 5000">
+      </div>
+    </div>
+
+    <div class="modal-actions" style="margin-top:20px">
       <button class="btn" onclick="closeModal('company-modal')">キャンセル</button>
-      <button class="btn btn-primary" onclick="createCompany()">追加</button>
+      <button class="btn btn-primary" id="company-modal-submit" onclick="submitCompanyModal()">登録</button>
     </div>
   </div>
 </div>
@@ -419,9 +503,23 @@
       <label>金額（円）</label>
       <input type="number" id="pay-amount" placeholder="例: 5000000">
     </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>請求日</label>
+        <input type="date" id="pay-invoice-date">
+      </div>
+      <div class="form-group">
+        <label>振込み期日 <span style="color:var(--red);font-size:10px">★催促メール基準</span></label>
+        <input type="date" id="pay-due-date">
+      </div>
+    </div>
     <div class="form-group">
       <label>支払予定日</label>
       <input type="date" id="pay-date">
+    </div>
+    <div class="form-group">
+      <label>支払先メールアドレス <span style="color:var(--red);font-size:10px">★催促メール送信先</span></label>
+      <input type="email" id="pay-payee-email" placeholder="payer@example.co.jp">
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('payment-modal')">キャンセル</button>
@@ -568,6 +666,8 @@ async function loadProjects() {
       <td>¥${fmt(p.total_cost)}</td>
       <td>${statusBadge(p.status)}</td>
       <td style="font-size:12px;color:var(--muted)">${p.start_date||'—'} → ${p.end_date||'—'}</td>
+      <td style="font-size:12px;color:var(--muted)">${p.invoice_date||'—'}</td>
+      <td style="font-size:12px;color:var(--muted)">${p.transfer_date||'—'}</td>
       <td>${p.company_name||'—'}</td>
       <td><button class="btn btn-sm" onclick="showProjectDetail(${p.id})">詳細</button></td>
     </tr>`).join('');
@@ -585,7 +685,17 @@ async function showProjectDetail(id) {
       ${pay.delay_days > 0 ? `<span style="font-size:11px;color:var(--red)">+${pay.delay_days}日</span>` : ''}
     </div>`).join('') : '<div style="color:var(--muted);padding:12px 0">支払い記録なし</div>';
 
-  alert(`【${p.code}】${p.name}\n工事費: ¥${fmt(p.total_cost)}\nステータス: ${p.status}\n期間: ${p.start_date} → ${p.end_date}`);
+  alert(`【${p.code}】${p.name}\n工事費: ¥${fmt(p.total_cost)}\nステータス: ${p.status}\n期間: ${p.start_date||'—'} → ${p.end_date||'—'}\n請求日: ${p.invoice_date||'—'}\n振込み日: ${p.transfer_date||'—'}`);
+}
+
+// 企業選択時にメールアドレスを自動入力
+let _companiesCache = [];
+function fillCompanyEmail() {
+  const cid = Number(document.getElementById('p-company').value);
+  const company = _companiesCache.find(c => c.id === cid);
+  if (company && company.email) {
+    document.getElementById('p-payee-email').value = company.email;
+  }
 }
 
 async function createProject() {
@@ -594,13 +704,17 @@ async function createProject() {
     total_cost: Number(document.getElementById('p-cost').value),
     start_date: document.getElementById('p-start').value || null,
     end_date: document.getElementById('p-end').value || null,
+    invoice_date: document.getElementById('p-invoice').value || null,
+    transfer_date: document.getElementById('p-transfer').value || null,
     company_id: Number(document.getElementById('p-company').value) || null,
+    payee_email: document.getElementById('p-payee-email').value.trim() || null,
     status: document.getElementById('p-status').value
   };
   if (!data.name || !data.total_cost) { alert('案件名と工事費は必須です'); return; }
   await fetch(API+'/projects', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
   closeModal('project-modal');
   loadProjects();
+  loadCompanies(); // メール更新を反映
 }
 
 // ─── Companies ───
@@ -611,6 +725,12 @@ async function loadCompanies() {
     <tr>
       <td><strong>${c.name}</strong></td>
       <td><span class="tier-${c.tier}">${c.tier}</span></td>
+      <td style="font-size:11px;color:${c.license_number?'var(--text)':'var(--red)'}">
+        ${c.license_number || '<span>未登録</span>'}
+      </td>
+      <td style="font-size:12px;color:${c.email?'var(--text)':'var(--muted)'}">
+        ${c.email || '—'}
+      </td>
       <td>${gradeBadge(c.credit_grade)}</td>
       <td>
         <div style="font-weight:600">${Math.round(c.credit_score)}</div>
@@ -624,21 +744,94 @@ async function loadCompanies() {
         <div>${c.completion_rate.toFixed(1)}%</div>
         ${scoreBar(c.completion_rate)}
       </td>
+      <td><button class="btn btn-sm" onclick="openEditCompany(${c.id})">編集</button></td>
     </tr>`).join('');
 }
 
-async function createCompany() {
+// 企業モーダル共通入力フィールドをリセット
+function resetCompanyModal() {
+  ['cm-id','cm-name','cm-tier','cm-representative','cm-phone','cm-address',
+   'cm-email','cm-license','cm-keishin','cm-work-type','cm-est-year',
+   'cm-capital','cm-employees','cm-payment-cycle','cm-credit-limit'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('cm-tier').value = '元請';
+  document.getElementById('company-score-badge').style.display = 'none';
+}
+
+// 新規登録モードで企業モーダルを開く
+function openNewCompany() {
+  resetCompanyModal();
+  document.getElementById('company-modal-title').textContent = '企業情報登録';
+  document.getElementById('company-modal-submit').textContent = '登録';
+  document.getElementById('company-modal').classList.add('open');
+}
+
+// 編集モードで企業モーダルを開く
+function openEditCompany(id) {
+  const c = _companiesCache.find(x => x.id === id);
+  if (!c) return;
+  resetCompanyModal();
+  document.getElementById('cm-id').value = c.id;
+  document.getElementById('cm-name').value = c.name || '';
+  document.getElementById('cm-tier').value = c.tier || '元請';
+  document.getElementById('cm-representative').value = c.representative || '';
+  document.getElementById('cm-phone').value = c.phone || '';
+  document.getElementById('cm-address').value = c.address || '';
+  document.getElementById('cm-email').value = c.email || '';
+  document.getElementById('cm-license').value = c.license_number || '';
+  document.getElementById('cm-keishin').value = c.keishin_score || '';
+  document.getElementById('cm-work-type').value = c.main_work_type || '';
+  document.getElementById('cm-est-year').value = c.established_year || '';
+  document.getElementById('cm-capital').value = c.capital || '';
+  document.getElementById('cm-employees').value = c.employees || '';
+  document.getElementById('cm-payment-cycle').value = c.payment_cycle || '';
+  document.getElementById('cm-credit-limit').value = c.credit_limit ? Math.round(c.credit_limit/10000) : '';
+  // 信用スコア表示
+  document.getElementById('company-score-badge').style.display = 'block';
+  const gradeColors = {AAA:'#3fb950',AA:'#4ade80',A:'#58a6ff',B:'#d29922',C:'#f85149'};
+  document.getElementById('cm-grade-badge').textContent = c.credit_grade;
+  document.getElementById('cm-grade-badge').style.color = gradeColors[c.credit_grade] || '#8b949e';
+  document.getElementById('cm-score-val').textContent = Math.round(c.credit_score);
+  document.getElementById('company-modal-title').textContent = '企業情報を編集';
+  document.getElementById('company-modal-submit').textContent = '保存';
+  document.getElementById('company-modal').classList.add('open');
+}
+
+async function submitCompanyModal() {
+  const id = document.getElementById('cm-id').value;
+  const isEdit = !!id;
+  const creditLimitRaw = document.getElementById('cm-credit-limit').value;
   const data = {
-    name: document.getElementById('c-name').value,
-    tier: document.getElementById('c-tier').value,
-    payment_rate: Number(document.getElementById('c-payment-rate').value),
-    completion_rate: Number(document.getElementById('c-completion-rate').value)
+    name: document.getElementById('cm-name').value.trim(),
+    tier: document.getElementById('cm-tier').value,
+    representative: document.getElementById('cm-representative').value.trim(),
+    phone: document.getElementById('cm-phone').value.trim(),
+    address: document.getElementById('cm-address').value.trim(),
+    email: document.getElementById('cm-email').value.trim(),
+    license_number: document.getElementById('cm-license').value.trim(),
+    keishin_score: document.getElementById('cm-keishin').value || null,
+    main_work_type: document.getElementById('cm-work-type').value.trim(),
+    established_year: document.getElementById('cm-est-year').value || null,
+    capital: document.getElementById('cm-capital').value || null,
+    employees: document.getElementById('cm-employees').value || null,
+    payment_cycle: document.getElementById('cm-payment-cycle').value || null,
+    credit_limit: creditLimitRaw ? Number(creditLimitRaw) * 10000 : null
   };
   if (!data.name) { alert('企業名は必須です'); return; }
-  await fetch(API+'/companies', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+  if (!data.email) { alert('メールアドレスは必須です'); return; }
+  if (isEdit) {
+    await fetch(API+'/companies/'+id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+  } else {
+    await fetch(API+'/companies', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+  }
   closeModal('company-modal');
-  loadCompanies();
+  await loadCompanies();
+  _companiesCache = await fetch(API+'/companies').then(r=>r.json());
 }
+
+async function createCompany() { openNewCompany(); }
 
 // ─── Payments ───
 async function loadPayments() {
@@ -658,10 +851,12 @@ async function loadPayments() {
       <td>${p.payer_name||'—'}</td>
       <td>${p.payee_name||'—'}</td>
       <td>¥${fmt(p.amount)}</td>
+      <td style="font-size:12px;color:${p.due_date?'var(--accent)':'var(--muted)'}">${p.due_date||'未設定'}</td>
       <td style="font-size:12px">${p.scheduled_date||'—'}</td>
       <td style="font-size:12px">${p.actual_date||'—'}</td>
       <td>${statusBadge(p.status)}</td>
       <td style="color:${p.delay_days>0?'var(--red)':'var(--muted)'}">${p.delay_days > 0 ? p.delay_days+'日' : '—'}</td>
+      <td style="font-size:11px;color:${p.payee_email?'var(--green)':'var(--red)'}">${p.payee_email ? '✓設定済' : '✗未設定'}</td>
       <td>
         ${p.status === '未払い' ? `<button class="btn btn-sm btn-success" onclick="completePayment(${p.id})">完了</button>` : ''}
       </td>
@@ -681,9 +876,13 @@ async function createPayment() {
     payer_id: Number(document.getElementById('pay-payer').value),
     payee_id: Number(document.getElementById('pay-payee').value),
     amount: Number(document.getElementById('pay-amount').value),
-    scheduled_date: document.getElementById('pay-date').value || null
+    invoice_date: document.getElementById('pay-invoice-date').value || null,
+    due_date: document.getElementById('pay-due-date').value || null,
+    scheduled_date: document.getElementById('pay-date').value || null,
+    payee_email: document.getElementById('pay-payee-email').value.trim() || null
   };
   if (!data.payer_id || !data.payee_id || !data.amount) { alert('必須項目を入力してください'); return; }
+  if (!data.due_date) { alert('振込み期日は自動催促メールに必要です。入力してください'); return; }
   await fetch(API+'/payments', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
   closeModal('payment-modal');
   loadPayments();
@@ -753,11 +952,23 @@ async function populateSelects() {
     fetch(API+'/companies').then(r=>r.json()),
     fetch(API+'/projects').then(r=>r.json())
   ]);
-  const opts = companies.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  _companiesCache = companies; // fillCompanyEmail で参照
+  const opts = companies.map(c => `<option value="${c.id}">${c.name}${c.email ? ' ✓' : ''}</option>`).join('');
   document.getElementById('p-company').innerHTML = opts;
   document.getElementById('pay-payer').innerHTML = opts;
   document.getElementById('pay-payee').innerHTML = opts;
   document.getElementById('pay-project').innerHTML = projects.map(p => `<option value="${p.id}">${p.code} - ${p.name}</option>`).join('');
+  // 支払先変更時にメール自動セット
+  document.getElementById('pay-payee').onchange = function() {
+    const cid = Number(this.value);
+    const company = _companiesCache.find(c => c.id === cid);
+    const emailInput = document.getElementById('pay-payee-email');
+    if (company && company.email && !emailInput.value) {
+      emailInput.value = company.email;
+    }
+  };
+  // 案件選択時に現在の会社メールをセット
+  fillCompanyEmail();
 }
 
 // ─── Auth ───

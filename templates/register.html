@@ -11,14 +11,14 @@
     --accent: #58a6ff; --green: #3fb950; --red: #f85149;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-  .container { width: 100%; max-width: 420px; padding: 24px; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 0; }
+  .container { width: 100%; max-width: 440px; padding: 24px; }
   .logo { text-align: center; margin-bottom: 32px; }
   .logo h1 { font-size: 28px; font-weight: 800; color: var(--accent); letter-spacing: 3px; }
   .logo p { color: var(--muted); font-size: 13px; margin-top: 6px; }
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 32px; }
   .card h2 { font-size: 18px; font-weight: 600; margin-bottom: 24px; }
-  .form-group { margin-bottom: 18px; }
+  .form-group { margin-bottom: 16px; }
   label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 500; }
   input, select { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 10px 14px; border-radius: 8px; font-size: 14px; transition: border-color 0.15s; }
   input:focus, select:focus { outline: none; border-color: var(--accent); }
@@ -30,6 +30,22 @@
   .hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
   .footer { text-align: center; margin-top: 20px; font-size: 13px; color: var(--muted); }
   .footer a { color: var(--accent); cursor: pointer; }
+
+  /* 会社選択タブ */
+  .company-tabs { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+  .company-tab { flex: 1; padding: 8px; text-align: center; font-size: 12px; cursor: pointer; background: var(--surface2); color: var(--muted); border: none; transition: all 0.15s; }
+  .company-tab.active { background: var(--accent); color: #000; font-weight: 700; }
+  .company-panel { display: none; }
+  .company-panel.active { display: block; }
+
+  /* 区分バッジ */
+  .tier-hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .tier-hint span { display: inline-block; padding: 1px 6px; border-radius: 8px; margin-right: 4px; font-size: 10px; }
+  .t1 { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .t2 { background: rgba(188,140,255,0.15); color: #bc8cff; }
+  .t3 { background: rgba(219,109,40,0.15); color: #db6d28; }
+
+  .section-divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
 </style>
 </head>
 <body>
@@ -41,6 +57,8 @@
   <div class="card">
     <h2>新規アカウント登録</h2>
     <div id="error-msg" class="error"></div>
+
+    <!-- アカウント情報 -->
     <div class="form-group">
       <label>メールアドレス</label>
       <input type="email" id="email" placeholder="example@company.jp">
@@ -54,12 +72,56 @@
       <label>パスワード（確認）</label>
       <input type="password" id="password2" placeholder="••••••••">
     </div>
+
+    <hr class="section-divider">
+
+    <!-- 会社設定 -->
     <div class="form-group">
       <label>所属企業</label>
-      <select id="company">
-        <option value="">選択してください（任意）</option>
-      </select>
+      <div class="company-tabs">
+        <button class="company-tab active" onclick="switchTab('new')">＋ 新規会社を登録</button>
+        <button class="company-tab" onclick="switchTab('existing')">既存の会社から選ぶ</button>
+        <button class="company-tab" onclick="switchTab('none')">登録しない</button>
+      </div>
+
+      <!-- 新規会社 -->
+      <div id="panel-new" class="company-panel active">
+        <div class="form-group" style="margin-bottom:10px">
+          <label>会社名</label>
+          <input type="text" id="new-company-name" placeholder="例: 山田建設株式会社">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>区分</label>
+          <select id="new-company-tier">
+            <option value="元請">元請（発注側）</option>
+            <option value="下請">下請（一次受け）</option>
+            <option value="孫請">孫請（二次受け）</option>
+          </select>
+          <div class="tier-hint">
+            <span class="t1">元請</span>発注・管理
+            <span class="t2">下請</span>一次受注
+            <span class="t3">孫請</span>二次受注
+          </div>
+        </div>
+      </div>
+
+      <!-- 既存会社 -->
+      <div id="panel-existing" class="company-panel">
+        <select id="existing-company">
+          <option value="">読み込み中...</option>
+        </select>
+      </div>
+
+      <!-- 登録しない -->
+      <div id="panel-none" class="company-panel">
+        <div style="font-size:12px;color:var(--muted);padding:10px 0;line-height:1.6">
+          会社未所属でも登録できます。<br>
+          登録後は全データの閲覧・案件登録が可能です。<br>
+          後からsuperadminが会社を割り当てられます。
+        </div>
+      </div>
     </div>
+
     <button class="btn" id="reg-btn" onclick="doRegister()">アカウント作成</button>
     <div class="footer">
       すでにアカウントをお持ちの方は <a onclick="location.href='/login'">ログイン</a>
@@ -68,39 +130,67 @@
 </div>
 
 <script>
+let activeTab = 'new';
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.company-tab').forEach((el, i) => {
+    el.classList.toggle('active', ['new','existing','none'][i] === tab);
+  });
+  document.querySelectorAll('.company-panel').forEach(el => el.classList.remove('active'));
+  document.getElementById('panel-' + tab).classList.add('active');
+}
+
 async function loadCompanies() {
   try {
     const res = await fetch('/api/companies', { credentials: 'include' });
     if (!res.ok) return;
     const companies = await res.json();
-    const sel = document.getElementById('company');
+    const sel = document.getElementById('existing-company');
+    sel.innerHTML = '<option value="">選択してください</option>';
     companies.forEach(c => {
       const opt = document.createElement('option');
       opt.value = c.id;
       opt.textContent = `${c.name}（${c.tier}）`;
       sel.appendChild(opt);
     });
-  } catch (e) {}
+  } catch (e) {
+    document.getElementById('existing-company').innerHTML = '<option value="">取得できませんでした</option>';
+  }
 }
 
 async function doRegister() {
   const email = document.getElementById('email').value.trim();
   const password = document.getElementById('password').value;
   const password2 = document.getElementById('password2').value;
-  const company_id = document.getElementById('company').value || null;
   const btn = document.getElementById('reg-btn');
-  const errEl = document.getElementById('error-msg');
-  errEl.style.display = 'none';
+  hideError();
+
   if (!email || !password) { showError('メールアドレスとパスワードを入力してください'); return; }
   if (password !== password2) { showError('パスワードが一致しません'); return; }
   if (password.length < 6) { showError('パスワードは6文字以上で設定してください'); return; }
+
+  let payload = { email, password };
+
+  if (activeTab === 'new') {
+    const name = document.getElementById('new-company-name').value.trim();
+    const tier = document.getElementById('new-company-tier').value;
+    if (!name) { showError('会社名を入力してください'); return; }
+    payload.new_company = { name, tier };
+  } else if (activeTab === 'existing') {
+    const cid = document.getElementById('existing-company').value;
+    if (!cid) { showError('会社を選択してください'); return; }
+    payload.company_id = Number(cid);
+  }
+  // 'none' の場合は何も追加しない
+
   btn.disabled = true;
   btn.textContent = '登録中...';
   try {
     const res = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, company_id: company_id ? Number(company_id) : null }),
+      body: JSON.stringify(payload),
       credentials: 'include'
     });
     const data = await res.json();
@@ -118,6 +208,9 @@ function showError(msg) {
   const el = document.getElementById('error-msg');
   el.textContent = msg;
   el.style.display = 'block';
+}
+function hideError() {
+  document.getElementById('error-msg').style.display = 'none';
 }
 
 loadCompanies();

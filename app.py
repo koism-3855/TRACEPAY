@@ -765,6 +765,26 @@ def get_email_logs():
                 .limit(200).all())
     return jsonify([l.to_dict() for l in logs])
 
+@app.route('/api/emails/test', methods=['POST'])
+@admin_required
+def test_send_email():
+    data = request.json
+    recipient = data.get('recipient', '').strip()
+    if not recipient:
+        return jsonify({'error': '送信先メールアドレスを指定してください'}), 400
+    if not app.config.get('MAIL_USERNAME'):
+        return jsonify({'error': 'MAIL_USERNAME が未設定です'}), 400
+    try:
+        msg = Message(
+            subject='【TRACE PAY】テスト送信',
+            recipients=[recipient],
+            body='これはTRACE PAYからのテストメールです。\n\nメール送信機能が正常に動作しています。\n\n─────────────────\nTRACE PAY 自動催促システム'
+        )
+        mail.send(msg)
+        return jsonify({'ok': True, 'message': f'{recipient} へ送信しました'})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+
 @app.route('/api/emails/send', methods=['POST'])
 @admin_required
 def manual_send_email():

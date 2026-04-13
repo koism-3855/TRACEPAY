@@ -997,89 +997,11 @@ def admin_export_companies():
 # ─────────────────────────── Seed Data ───────────────────────────
 
 def seed_data():
-    if Company.query.count() > 0:
-        return
-    companies_data = [
-        ('大和建設株式会社', '元請', 95.0, 98.0),
-        ('東洋工業株式会社', '元請', 88.0, 92.0),
-        ('山田工務店', '下請', 72.0, 85.0),
-        ('鈴木建築', '下請', 65.0, 78.0),
-        ('田中土木', '下請', 55.0, 70.0),
-        ('佐藤設備工業', '孫請', 90.0, 95.0),
-        ('高橋電気工事', '孫請', 45.0, 60.0),
-        ('中村塗装', '孫請', 80.0, 88.0),
-        ('小林基礎工事', '孫請', 35.0, 55.0),
-        ('渡辺鉄骨', '下請', 78.0, 82.0),
-    ]
-    companies = []
-    for name, tier, payment_rate, completion_rate in companies_data:
-        c = Company(name=name, tier=tier, payment_rate=payment_rate, completion_rate=completion_rate)
-        db.session.add(c)
-        companies.append(c)
-    db.session.flush()
-
-    from datetime import timedelta
-    today = date.today()
-    projects_data = [
-        ('渋谷再開発プロジェクト', 500000000, '進行中', today - timedelta(days=90), today + timedelta(days=180)),
-        ('港区オフィスビル建設', 320000000, '進行中', today - timedelta(days=60), today + timedelta(days=240)),
-        ('横浜工場増設工事', 180000000, '完了', today - timedelta(days=200), today - timedelta(days=30)),
-        ('新宿マンション建設', 420000000, '進行中', today - timedelta(days=30), today + timedelta(days=300)),
-        ('川崎物流センター建設', 260000000, '中断', today - timedelta(days=120), today + timedelta(days=60)),
-    ]
-    projects = []
-    for name, cost, status, start, end in projects_data:
-        code = 'PRJ-' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-        p = Project(code=code, name=name, total_cost=cost, status=status,
-                    start_date=start, end_date=end, company_id=companies[0].id)
-        db.session.add(p)
-        projects.append(p)
-    db.session.flush()
-
-    # (pi, payer_i, payee_i, amount, sched, actual, status, delay, due_date_offset, email)
-    payments_data = [
-        (0, 1, 2, 50000000, today-timedelta(days=60), today-timedelta(days=55), '完了', 0,  -55, 'yamada@toyokogyo.jp'),
-        (0, 2, 3, 30000000, today-timedelta(days=45), today-timedelta(days=30), '遅延', 15, -30, 'suzuki@yamadakoumuten.jp'),
-        (0, 3, 4, 15000000, today-timedelta(days=30), None,                     '未払い', 0, -30, 'tanaka@suzukikenchiku.jp'),
-        (1, 1, 2, 40000000, today-timedelta(days=20), today-timedelta(days=18), '完了', 0,  -18, 'yamada@toyokogyo.jp'),
-        (1, 2, 5, 20000000, today-timedelta(days=10), None,                     '未払い', 0, -10, 'nakamura@tanakadобоку.jp'),
-        (2, 1, 2, 25000000, today-timedelta(days=100),today-timedelta(days=65), '遅延', 35, -65, 'yamada@toyokogyo.jp'),
-        (2, 2, 6, 12000000, today-timedelta(days=80), today-timedelta(days=79), '完了', 0,  -79, 'sato@satosetsubi.jp'),
-        (3, 1, 3, 60000000, today+timedelta(days=30), None,                     '未払い', 0, +30, 'suzuki@yamadakoumuten.jp'),
-        (3, 3, 7, 18000000, today-timedelta(days=5),  None,                     '未払い', 0,  -5, 'takahashi@takahashidenki.jp'),
-        (4, 2, 4, 35000000, today-timedelta(days=50), None,                     '未払い', 0, -50, 'tanaka@suzukikenchiku.jp'),
-    ]
-    for pi, payer_i, payee_i, amount, sched, actual, status, delay, due_offset, email in payments_data:
-        pay = Payment(
-            project_id=projects[pi].id,
-            payer_id=companies[payer_i].id,
-            payee_id=companies[payee_i].id,
-            amount=amount,
-            scheduled_date=sched,
-            actual_date=actual,
-            status=status,
-            delay_days=delay,
-            due_date=today + timedelta(days=due_offset),
-            invoice_date=sched - timedelta(days=14) if sched else None,
-            payee_email=email,
-        )
-        db.session.add(pay)
-    db.session.commit()
-
-    for c in companies:
-        recalculate_score(c.id)
-
-    # Seed demo accounts
+    # デモアカウントのみ作成（企業・案件・支払いのサンプルデータは作らない）
     if User.query.count() == 0:
         superadmin = User(email='superadmin@tracepay.jp', role='superadmin', company_id=None)
         superadmin.set_password('super1234')
         db.session.add(superadmin)
-        admin = User(email='admin@tracepay.jp', role='admin', company_id=companies[0].id)
-        admin.set_password('admin1234')
-        db.session.add(admin)
-        member = User(email='member@tracepay.jp', role='member', company_id=companies[1].id)
-        member.set_password('member1234')
-        db.session.add(member)
         db.session.commit()
 
 # gunicorn でも __main__ でも必ず実行されるようにモジュールレベルで初期化

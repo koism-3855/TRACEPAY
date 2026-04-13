@@ -769,7 +769,8 @@ async function initAuth() {
   const data = await res.json();
   currentUser = data.user;
   document.getElementById('user-email').textContent = currentUser.email;
-  document.getElementById('user-company').textContent = currentUser.company_name || '未所属';
+  const companyLabel = currentUser.company_name || '未所属（全データ閲覧可）';
+  document.getElementById('user-company').textContent = companyLabel;
   const badge = document.getElementById('user-role-badge');
   badge.textContent = currentUser.role === 'admin' ? 'admin' : 'member';
   const roleClass = currentUser.role === 'superadmin' ? 'role-superadmin' : currentUser.role === 'admin' ? 'role-admin' : 'role-member';

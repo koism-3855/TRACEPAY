@@ -247,7 +247,10 @@ def visible_company_ids():
     """Return list of company IDs the current user may see. None = all."""
     if current_user.role in ('admin', 'superadmin'):
         return None
-    return [current_user.company_id] if current_user.company_id else []
+    # 会社未所属のメンバーは全データを閲覧可（制限なし）
+    if not current_user.company_id:
+        return None
+    return [current_user.company_id]
 
 # ─────────────────────────── Score Calc ───────────────────────────
 
@@ -465,8 +468,11 @@ def create_project():
     code = 'PRJ-' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
     # members can only create under their own company
     company_id = data.get('company_id')
-    if current_user.role != 'admin':
-        company_id = current_user.company_id
+    if current_user.role not in ('admin', 'superadmin'):
+        # 会社所属のメンバー → 自社に固定
+        # 会社未所属のメンバー → フォームの選択値を使用
+        if current_user.company_id:
+            company_id = current_user.company_id
     project = Project(
         code=code,
         name=data['name'],

@@ -170,6 +170,9 @@
         <span class="nav-icon">⚠</span> リスクアラート
         <span id="alert-badge" style="margin-left:auto;background:var(--red);color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;display:none"></span>
       </div>
+      <div class="nav-item" onclick="showPage('emails')">
+        <span class="nav-icon">✉</span> 催促メール
+      </div>
       <div class="nav-item" id="nav-admin" style="display:none" onclick="location.href='/admin'">
         <span class="nav-icon">⚙</span> 管理画面
       </div>
@@ -279,6 +282,32 @@
             <tr><th>案件</th><th>支払元</th><th>支払先</th><th>金額</th><th>予定日</th><th>実績日</th><th>ステータス</th><th>遅延日数</th><th>操作</th></tr>
           </thead>
           <tbody id="payments-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Emails -->
+    <div id="page-emails" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">催促メール履歴</div>
+          <div class="page-subtitle">自動・手動で送信された催促メールの記録</div>
+        </div>
+        <button class="btn" onclick="loadEmails()">↻ 更新</button>
+      </div>
+      <!-- Stats row -->
+      <div class="cards cards-4" id="email-stats" style="margin-bottom:20px">
+        <div class="card card-blue"><div class="card-title">総送信数</div><div class="card-value" id="es-total">—</div></div>
+        <div class="card card-green"><div class="card-title">成功</div><div class="card-value" id="es-ok" style="color:var(--green)">—</div></div>
+        <div class="card card-red"><div class="card-title">失敗</div><div class="card-value" id="es-fail" style="color:var(--red)">—</div></div>
+        <div class="card card-yellow"><div class="card-title">最終送信日</div><div class="card-value" id="es-last" style="font-size:16px">—</div></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>送信日時</th><th>案件</th><th>宛先</th><th>タイミング</th><th>件名</th><th>結果</th></tr>
+          </thead>
+          <tbody id="emails-tbody"></tbody>
         </table>
       </div>
     </div>
@@ -415,6 +444,7 @@ function showPage(id) {
   if (id === 'companies') loadCompanies();
   if (id === 'payments') loadPayments();
   if (id === 'alerts') loadAlerts();
+  if (id === 'emails') loadEmails();
 }
 
 // ─── Modals ───
@@ -669,6 +699,52 @@ async function loadAlerts() {
   const badge = document.getElementById('alert-badge');
   badge.style.display = 'inline';
   badge.textContent = alerts.length;
+}
+
+// ─── Emails ───
+async function loadEmails() {
+  const logs = await fetch(API+'/emails/logs', { credentials: 'include' }).then(r => r.json()).catch(() => []);
+  const tbody = document.getElementById('emails-tbody');
+
+  // Stats
+  const total = logs.length;
+  const ok = logs.filter(l => l.success).length;
+  const fail = total - ok;
+  const last = logs.length ? logs[0].sent_at.slice(0, 10) : '—';
+  document.getElementById('es-total').textContent = total;
+  document.getElementById('es-ok').textContent = ok;
+  document.getElementById('es-fail').textContent = fail;
+  document.getElementById('es-last').textContent = last;
+
+  if (!total) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">送信履歴なし</td></tr>';
+    return;
+  }
+
+  const triggerColor = {
+    '7日前':'#58a6ff','1日前':'#58a6ff','当日':'#d29922',
+    '3日超過':'#d29922','7日超過':'#f85149','14日超過':'#f85149','手動':'#8b949e'
+  };
+
+  tbody.innerHTML = logs.map(l => `
+    <tr>
+      <td style="font-size:12px;color:var(--muted);white-space:nowrap">${l.sent_at.slice(0,16).replace('T',' ')}</td>
+      <td style="font-size:13px">${l.project_name || '—'}</td>
+      <td style="font-size:12px;color:var(--muted)">${l.recipient}</td>
+      <td>
+        <span style="font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;
+          background:${triggerColor[l.trigger_type]||'#8b949e'}22;
+          color:${triggerColor[l.trigger_type]||'#8b949e'}">
+          ${l.trigger_type}
+        </span>
+      </td>
+      <td style="font-size:12px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.subject}</td>
+      <td>
+        ${l.success
+          ? '<span class="badge badge-green">✓ 成功</span>'
+          : `<span class="badge badge-red" title="${l.error_message||''}">✗ 失敗</span>`}
+      </td>
+    </tr>`).join('');
 }
 
 // ─── Populate Selects ───

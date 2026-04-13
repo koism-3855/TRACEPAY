@@ -645,9 +645,19 @@ def risk_alerts():
 # ─────────────────────────── Email API ───────────────────────────
 
 @app.route('/api/emails/logs', methods=['GET'])
-@admin_required
+@api_login_required
 def get_email_logs():
-    logs = EmailLog.query.order_by(EmailLog.sent_at.desc()).limit(200).all()
+    cids = visible_company_ids()
+    if cids is None:
+        # admin/superadmin: 全件
+        logs = EmailLog.query.order_by(EmailLog.sent_at.desc()).limit(200).all()
+    else:
+        # member: 自社が支払元/支払先の支払いに紐づくログのみ
+        logs = (EmailLog.query
+                .join(Payment, EmailLog.payment_id == Payment.id)
+                .filter((Payment.payer_id.in_(cids)) | (Payment.payee_id.in_(cids)))
+                .order_by(EmailLog.sent_at.desc())
+                .limit(200).all())
     return jsonify([l.to_dict() for l in logs])
 
 @app.route('/api/emails/send', methods=['POST'])

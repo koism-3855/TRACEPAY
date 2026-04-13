@@ -125,6 +125,24 @@
   .tier-元請 { color: var(--accent); }
   .tier-下請 { color: var(--purple); }
   .tier-孫請 { color: var(--orange); }
+
+  /* Email */
+  .tpl-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 16px; overflow: hidden; }
+  .tpl-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: var(--surface2); border-bottom: 1px solid var(--border); cursor: pointer; }
+  .tpl-header h4 { font-size: 13px; font-weight: 600; }
+  .tpl-body { padding: 16px; display: none; }
+  .tpl-body.open { display: block; }
+  .tpl-body label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; margin-top: 12px; }
+  .tpl-body label:first-child { margin-top: 0; }
+  .tpl-body input, .tpl-body textarea { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; font-size: 12px; font-family: inherit; }
+  .tpl-body textarea { min-height: 120px; resize: vertical; line-height: 1.5; }
+  .tpl-body input:focus, .tpl-body textarea:focus { outline: none; border-color: var(--purple); }
+  .tpl-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .tpl-vars { font-size: 11px; color: var(--muted); margin-top: 8px; line-height: 1.6; }
+  .tpl-vars code { background: var(--surface2); padding: 1px 4px; border-radius: 3px; color: var(--accent); }
+  .badge-sent { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge-fail { background: rgba(248,81,73,0.15); color: var(--red); }
+  .trigger-badge { font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 600; background: rgba(188,140,255,0.12); color: var(--purple); }
 </style>
 </head>
 <body>
@@ -150,6 +168,12 @@
       </div>
       <div class="nav-item" onclick="showSection('export', this)">
         <span>↓</span> CSVエクスポート
+      </div>
+      <div class="nav-item" onclick="showSection('email-logs', this)">
+        <span>✉</span> メール送信履歴
+      </div>
+      <div class="nav-item" onclick="showSection('email-templates', this)">
+        <span>✎</span> メールテンプレート
       </div>
       <div class="nav-item" style="margin-top:8px;border-top:1px solid var(--border);padding-top:16px" onclick="location.href='/'">
         <span>←</span> メイン画面へ
@@ -298,6 +322,78 @@
       </div>
     </div>
 
+    <!-- Email Logs -->
+    <div id="section-email-logs" class="section">
+      <div class="page-header">
+        <div>
+          <div class="page-title">メール送信履歴</div>
+          <div class="page-subtitle">催促メールの送信記録・エラー確認</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn" onclick="loadEmailLogs()">↻ 更新</button>
+          <button class="btn btn-primary" onclick="openManualSend()">✉ 今すぐ送信</button>
+        </div>
+      </div>
+
+      <!-- Manual send form -->
+      <div id="manual-send-card" class="card" style="display:none;margin-bottom:16px">
+        <div class="section-title" style="margin-bottom:12px">手動催促メール送信</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">支払いID</label>
+            <input type="number" id="manual-payment-id" placeholder="例: 3" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px">
+          </div>
+          <div>
+            <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">送信タイプ</label>
+            <select id="manual-trigger" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px">
+              <option value="手動">手動</option>
+              <option value="7日前">7日前リマインド</option>
+              <option value="1日前">1日前リマインド</option>
+              <option value="当日">当日確認</option>
+              <option value="3日超過">3日超過催促</option>
+              <option value="7日超過">7日超過催促</option>
+              <option value="14日超過">最終警告</option>
+            </select>
+          </div>
+        </div>
+        <div id="manual-send-result" style="display:none;margin-top:10px;padding:10px 14px;border-radius:6px;font-size:13px"></div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn btn-primary" onclick="doManualSend()">送信</button>
+          <button class="btn" onclick="closeManualSend()">キャンセル</button>
+        </div>
+      </div>
+
+      <div class="table-wrap" style="margin-top:0">
+        <table>
+          <thead>
+            <tr><th>送信日時</th><th>案件</th><th>宛先</th><th>トリガー</th><th>件名</th><th>結果</th></tr>
+          </thead>
+          <tbody id="email-logs-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Email Templates -->
+    <div id="section-email-templates" class="section">
+      <div class="page-header">
+        <div>
+          <div class="page-title">メールテンプレート編集</div>
+          <div class="page-subtitle">送信タイミング別の件名・本文を編集できます</div>
+        </div>
+        <button class="btn" onclick="loadEmailTemplates()">↻ 更新</button>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">
+        利用可能な変数:
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;color:var(--accent)">{project}</code>
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;color:var(--accent)">{payer}</code>
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;color:var(--accent)">{amount}</code>
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;color:var(--accent)">{due_date}</code>
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;color:var(--accent)">{overdue}</code>
+        <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;color:var(--accent)">{complete_url}</code>
+      </div>
+      <div id="templates-list"></div>
+    </div>
+
   </main>
 </div>
 
@@ -315,6 +411,8 @@ function showSection(id, el) {
   if (id === 'users') loadUsers();
   if (id === 'companies') loadAdminCompanies();
   if (id === 'projects') loadAdminProjects();
+  if (id === 'email-logs') loadEmailLogs();
+  if (id === 'email-templates') loadEmailTemplates();
 }
 
 function toast(msg, ok = true) {
@@ -484,6 +582,120 @@ async function loadAdminProjects() {
 function escHtml(s) {
   if (!s) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── Email Logs ───
+async function loadEmailLogs() {
+  const logs = await fetch(API + '/emails/logs', { credentials: 'include' }).then(r => r.json());
+  const tbody = document.getElementById('email-logs-tbody');
+  if (!logs.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">送信履歴なし</td></tr>';
+    return;
+  }
+  tbody.innerHTML = logs.map(l => `
+    <tr>
+      <td style="font-size:12px;color:var(--muted)">${l.sent_at.slice(0,16).replace('T',' ')}</td>
+      <td style="font-size:12px">${escHtml(l.project_name || '—')}</td>
+      <td style="font-size:12px">${escHtml(l.recipient)}</td>
+      <td><span class="trigger-badge">${escHtml(l.trigger_type)}</span></td>
+      <td style="font-size:12px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(l.subject)}</td>
+      <td>
+        ${l.success
+          ? '<span class="badge badge-sent">成功</span>'
+          : `<span class="badge badge-fail" title="${escHtml(l.error_message||'')}">失敗</span>`}
+      </td>
+    </tr>`).join('');
+}
+
+function openManualSend() {
+  document.getElementById('manual-send-card').style.display = 'block';
+  document.getElementById('manual-send-result').style.display = 'none';
+}
+function closeManualSend() {
+  document.getElementById('manual-send-card').style.display = 'none';
+}
+
+async function doManualSend() {
+  const payment_id = Number(document.getElementById('manual-payment-id').value);
+  const trigger_type = document.getElementById('manual-trigger').value;
+  const resultEl = document.getElementById('manual-send-result');
+  if (!payment_id) { showManualResult('支払いIDを入力してください', false); return; }
+  const res = await fetch(API + '/emails/send', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ payment_id, trigger_type })
+  });
+  const data = await res.json();
+  if (res.ok && data.ok) {
+    showManualResult(data.message, true);
+    setTimeout(() => loadEmailLogs(), 800);
+  } else {
+    showManualResult(data.error || 'エラーが発生しました', false);
+  }
+}
+
+function showManualResult(msg, ok) {
+  const el = document.getElementById('manual-send-result');
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.style.background = ok ? 'rgba(63,185,80,0.1)' : 'rgba(248,81,73,0.1)';
+  el.style.border = ok ? '1px solid rgba(63,185,80,0.3)' : '1px solid rgba(248,81,73,0.3)';
+  el.style.color = ok ? 'var(--green)' : 'var(--red)';
+}
+
+// ─── Email Templates ───
+async function loadEmailTemplates() {
+  const templates = await fetch(API + '/emails/templates', { credentials: 'include' }).then(r => r.json());
+  const container = document.getElementById('templates-list');
+  container.innerHTML = templates.map(t => `
+    <div class="tpl-card">
+      <div class="tpl-header" onclick="toggleTpl('${t.trigger_type}')">
+        <h4>
+          <span class="trigger-badge" style="margin-right:8px">${escHtml(t.trigger_type)}</span>
+          ${escHtml(t.subject_template)}
+        </h4>
+        <div style="display:flex;align-items:center;gap:8px">
+          ${t.is_customized ? '<span style="font-size:11px;color:var(--yellow)">カスタム済</span>' : '<span style="font-size:11px;color:var(--muted)">デフォルト</span>'}
+          <span style="color:var(--muted)">▾</span>
+        </div>
+      </div>
+      <div class="tpl-body" id="tpl-${t.trigger_type.replace(/\s/g,'-')}">
+        <label>件名テンプレート</label>
+        <input type="text" id="subj-${t.trigger_type}" value="${escHtml(t.subject_template)}">
+        <label>本文テンプレート</label>
+        <textarea id="body-${t.trigger_type}">${escHtml(t.body_template)}</textarea>
+        <div class="tpl-actions">
+          <button class="btn btn-primary btn-sm" onclick="saveTpl('${t.trigger_type}')">保存</button>
+          <button class="btn btn-sm" onclick="resetTpl('${t.trigger_type}')">デフォルトに戻す</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function toggleTpl(type) {
+  const el = document.getElementById('tpl-' + type.replace(/\s/g, '-'));
+  el.classList.toggle('open');
+}
+
+async function saveTpl(type) {
+  const subject_template = document.getElementById('subj-' + type).value;
+  const body_template = document.getElementById('body-' + type).value;
+  const res = await fetch(`${API}/emails/templates/${encodeURIComponent(type)}`, {
+    method: 'PUT', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ subject_template, body_template })
+  });
+  if (res.ok) { toast('テンプレートを保存しました'); loadEmailTemplates(); }
+  else { toast('保存に失敗しました', false); }
+}
+
+async function resetTpl(type) {
+  if (!confirm(`「${type}」テンプレートをデフォルトに戻しますか？`)) return;
+  const res = await fetch(`${API}/emails/templates/${encodeURIComponent(type)}/reset`, {
+    method: 'POST', credentials: 'include'
+  });
+  if (res.ok) { toast('デフォルトに戻しました'); loadEmailTemplates(); }
+  else { toast('リセットに失敗しました', false); }
 }
 
 initAdmin();

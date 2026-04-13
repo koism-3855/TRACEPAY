@@ -3,13 +3,17 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_bcrypt import Bcrypt
-from datetime import datetime, date
+from flask_mail import Mail, Message
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+from datetime import datetime, date, timedelta
 from functools import wraps
 import random
 import string
 import csv
 import io
 import os
+import atexit
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
@@ -17,8 +21,17 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///tracepay.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'tracepay-secret-key-2024')
 
+# ── Flask-Mail (Gmail SMTP) ──
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', '')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', '')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME', 'noreply@tracepay.jp')
+
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
+mail = Mail(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login_page'
 
@@ -122,6 +135,12 @@ class Payment(db.Model):
     actual_date = db.Column(db.Date)
     status = db.Column(db.String(20), default='未払い')
     delay_days = db.Column(db.Integer, default=0)
+    # 催促メール拡張フィールド
+    invoice_date = db.Column(db.Date)
+    due_date = db.Column(db.Date)
+    payee_email = db.Column(db.String(120))
+    reminder_count = db.Column(db.Integer, default=0)
+    last_reminder_sent = db.Column(db.Date)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
@@ -139,7 +158,52 @@ class Payment(db.Model):
             'actual_date': self.actual_date.isoformat() if self.actual_date else None,
             'status': self.status,
             'delay_days': self.delay_days,
+            'invoice_date': self.invoice_date.isoformat() if self.invoice_date else None,
+            'due_date': self.due_date.isoformat() if self.due_date else None,
+            'payee_email': self.payee_email,
+            'reminder_count': self.reminder_count,
+            'last_reminder_sent': self.last_reminder_sent.isoformat() if self.last_reminder_sent else None,
             'created_at': self.created_at.isoformat()
+        }
+
+class EmailLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    payment_id = db.Column(db.Integer, db.ForeignKey('payment.id'))
+    payment = db.relationship('Payment', backref='email_logs')
+    recipient = db.Column(db.String(120), nullable=False)
+    subject = db.Column(db.String(200))
+    trigger_type = db.Column(db.String(50))   # 7日前/1日前/当日/3日超過/7日超過/14日超過/手動
+    success = db.Column(db.Boolean, default=True)
+    error_message = db.Column(db.Text)
+    sent_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'payment_id': self.payment_id,
+            'project_name': self.payment.project.name if self.payment and self.payment.project else None,
+            'recipient': self.recipient,
+            'subject': self.subject,
+            'trigger_type': self.trigger_type,
+            'success': self.success,
+            'error_message': self.error_message,
+            'sent_at': self.sent_at.isoformat()
+        }
+
+class EmailTemplate(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    trigger_type = db.Column(db.String(50), unique=True, nullable=False)
+    subject_template = db.Column(db.String(200))
+    body_template = db.Column(db.Text)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'trigger_type': self.trigger_type,
+            'subject_template': self.subject_template,
+            'body_template': self.body_template,
+            'updated_at': self.updated_at.isoformat()
         }
 
 @login_manager.user_loader
@@ -216,6 +280,101 @@ def recalculate_score(company_id):
     company.credit_grade = grade
     company.payment_rate = payment_rate
     db.session.commit()
+
+# ─────────────────────────── Email / Reminder ───────────────────────────
+
+DEFAULT_TEMPLATES = {
+    '7日前':   ('【TRACE PAY】{project}の支払い期日まで7日です',
+                '※このメールはシステムから自動送信されています。\n\n{payer}様\n\n下記のお支払いの期日が7日後に迫っています。\n\n【案件名】{project}\n【支払金額】{amount}円\n【支払期日】{due_date}\n\nお早めにご準備をお願いいたします。\n\n支払い完了後は下記URLよりご報告ください：\n{complete_url}\n\n─────────────────\nTRACE PAY 自動催促システム'),
+    '1日前':   ('【TRACE PAY】{project}の支払い期日は明日です',
+                '※このメールはシステムから自動送信されています。\n\n{payer}様\n\n下記のお支払いの期日は明日です。\n\n【案件名】{project}\n【支払金額】{amount}円\n【支払期日】{due_date}\n\n明日までのお支払いをお願いいたします。\n\n支払い完了後は下記URLよりご報告ください：\n{complete_url}\n\n─────────────────\nTRACE PAY 自動催促システム'),
+    '当日':    ('【TRACE PAY】{project}のお支払い期日は本日です',
+                '※このメールはシステムから自動送信されています。\n\n{payer}様\n\n下記のお支払いの期日は本日です。\n\n【案件名】{project}\n【支払金額】{amount}円\n【支払期日】{due_date}\n\n本日中のお支払いをお願いいたします。\n\n支払い完了後は下記URLよりご報告ください：\n{complete_url}\n\n─────────────────\nTRACE PAY 自動催促システム'),
+    '3日超過':  ('【TRACE PAY】{project}の支払いが{overdue}日超過しています',
+                '※このメールはシステムから自動送信されています。\n\n{payer}様\n\n下記のお支払いが期日より{overdue}日超過しています。\n\n【案件名】{project}\n【支払金額】{amount}円\n【支払期日】{due_date}\n【超過日数】{overdue}日\n\n至急ご対応をお願いいたします。\n\n支払い完了後は下記URLよりご報告ください：\n{complete_url}\n\n─────────────────\nTRACE PAY 自動催促システム'),
+    '7日超過':  ('【TRACE PAY】第二催促：{project}の支払いが{overdue}日超過',
+                '※このメールはシステムから自動送信されています。\n\n{payer}様\n\n先日ご連絡いたしましたが、下記のお支払いがまだ完了していません。\n\n【案件名】{project}\n【支払金額】{amount}円\n【支払期日】{due_date}\n【超過日数】{overdue}日\n\n早急にご対応いただけますようお願いいたします。\n\n支払い完了後は下記URLよりご報告ください：\n{complete_url}\n\n─────────────────\nTRACE PAY 自動催促システム'),
+    '14日超過': ('【TRACE PAY】最終警告：{project}の支払いが{overdue}日超過',
+                '※このメールはシステムから自動送信されています。\n\n{payer}様\n\n下記のお支払いについて最終警告をお送りします。\n\n【案件名】{project}\n【支払金額】{amount}円\n【支払期日】{due_date}\n【超過日数】{overdue}日\n\nこれ以上のご対応がない場合、信用スコアに影響が生じます。\n至急ご連絡ください。\n\n支払い完了後は下記URLよりご報告ください：\n{complete_url}\n\n─────────────────\nTRACE PAY 自動催促システム'),
+}
+
+def get_template(trigger_type):
+    t = EmailTemplate.query.filter_by(trigger_type=trigger_type).first()
+    if t:
+        return t.subject_template, t.body_template
+    return DEFAULT_TEMPLATES.get(trigger_type, ('【TRACE PAY】お支払いのご確認', ''))
+
+def send_reminder(payment, trigger_type, base_url='https://tracepay.onrender.com'):
+    if not payment.payee_email:
+        return False, 'メールアドレス未設定'
+    due = payment.due_date or payment.scheduled_date
+    overdue = (date.today() - due).days if due else 0
+    complete_url = f'{base_url}/api/payments/{payment.id}/complete_link'
+    project_name = payment.project.name if payment.project else '不明'
+    payer_name = payment.payer.name if payment.payer else '不明'
+    amount_str = f'{int(payment.amount):,}'
+    due_str = due.strftime('%Y年%m月%d日') if due else '不明'
+    subject_tpl, body_tpl = get_template(trigger_type)
+    ctx = dict(project=project_name, payer=payer_name, amount=amount_str,
+               due_date=due_str, overdue=overdue, complete_url=complete_url)
+    subject = subject_tpl.format(**ctx)
+    body = body_tpl.format(**ctx)
+    log = EmailLog(payment_id=payment.id, recipient=payment.payee_email,
+                   subject=subject, trigger_type=trigger_type)
+    try:
+        if not app.config.get('MAIL_USERNAME'):
+            raise ValueError('MAIL_USERNAME が未設定です')
+        msg = Message(subject=subject, recipients=[payment.payee_email], body=body)
+        mail.send(msg)
+        payment.reminder_count = (payment.reminder_count or 0) + 1
+        payment.last_reminder_sent = date.today()
+        log.success = True
+        db.session.add(log)
+        db.session.commit()
+        return True, 'OK'
+    except Exception as e:
+        log.success = False
+        log.error_message = str(e)
+        db.session.add(log)
+        db.session.commit()
+        return False, str(e)
+
+def check_and_send_reminders():
+    """APScheduler が毎日9時に呼び出す関数"""
+    with app.app_context():
+        today = date.today()
+        payments = Payment.query.filter(Payment.status != '完了').all()
+        for p in payments:
+            due = p.due_date or p.scheduled_date
+            if not due or not p.payee_email:
+                continue
+            # 同日に複数回送らない
+            if p.last_reminder_sent == today:
+                continue
+            days_left = (due - today).days
+            overdue = (today - due).days
+            trigger = None
+            if days_left == 7:
+                trigger = '7日前'
+            elif days_left == 1:
+                trigger = '1日前'
+            elif days_left == 0:
+                trigger = '当日'
+            elif overdue == 3:
+                trigger = '3日超過'
+            elif overdue == 7:
+                trigger = '7日超過'
+            elif overdue == 14:
+                trigger = '14日超過'
+            if trigger:
+                send_reminder(p, trigger)
+
+# APScheduler 起動（gunicorn のワーカー重複起動を避けるため環境変数で制御）
+if os.environ.get('DISABLE_SCHEDULER', '').lower() != 'true':
+    scheduler = BackgroundScheduler(timezone='Asia/Tokyo')
+    scheduler.add_job(check_and_send_reminders, CronTrigger(hour=9, minute=0))
+    scheduler.start()
+    atexit.register(lambda: scheduler.shutdown(wait=False))
 
 # ─────────────────────────── Page Routes ───────────────────────────
 
@@ -483,6 +642,80 @@ def risk_alerts():
     alerts.sort(key=lambda x: 0 if x['severity'] == 'high' else 1)
     return jsonify(alerts)
 
+# ─────────────────────────── Email API ───────────────────────────
+
+@app.route('/api/emails/logs', methods=['GET'])
+@admin_required
+def get_email_logs():
+    logs = EmailLog.query.order_by(EmailLog.sent_at.desc()).limit(200).all()
+    return jsonify([l.to_dict() for l in logs])
+
+@app.route('/api/emails/send', methods=['POST'])
+@admin_required
+def manual_send_email():
+    data = request.json
+    payment_id = data.get('payment_id')
+    trigger_type = data.get('trigger_type', '手動')
+    payment = Payment.query.get_or_404(payment_id)
+    ok, msg = send_reminder(payment, trigger_type)
+    if ok:
+        return jsonify({'ok': True, 'message': f'{payment.payee_email} へ送信しました'})
+    return jsonify({'ok': False, 'error': msg}), 400
+
+@app.route('/api/emails/templates', methods=['GET'])
+@admin_required
+def get_email_templates():
+    result = []
+    for trigger_type, (subj, body) in DEFAULT_TEMPLATES.items():
+        t = EmailTemplate.query.filter_by(trigger_type=trigger_type).first()
+        result.append({
+            'trigger_type': trigger_type,
+            'subject_template': t.subject_template if t else subj,
+            'body_template': t.body_template if t else body,
+            'is_customized': t is not None
+        })
+    return jsonify(result)
+
+@app.route('/api/emails/templates/<trigger_type>', methods=['PUT'])
+@admin_required
+def update_email_template(trigger_type):
+    if trigger_type not in DEFAULT_TEMPLATES:
+        return jsonify({'error': '無効なトリガータイプです'}), 400
+    data = request.json
+    t = EmailTemplate.query.filter_by(trigger_type=trigger_type).first()
+    if not t:
+        t = EmailTemplate(trigger_type=trigger_type)
+        db.session.add(t)
+    t.subject_template = data.get('subject_template', '')
+    t.body_template = data.get('body_template', '')
+    t.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify(t.to_dict())
+
+@app.route('/api/emails/templates/<trigger_type>/reset', methods=['POST'])
+@admin_required
+def reset_email_template(trigger_type):
+    t = EmailTemplate.query.filter_by(trigger_type=trigger_type).first()
+    if t:
+        db.session.delete(t)
+        db.session.commit()
+    return jsonify({'ok': True, 'message': 'デフォルトテンプレートに戻しました'})
+
+@app.route('/api/payments/<int:pid>/complete_link', methods=['GET'])
+def payment_complete_link(pid):
+    """メール内のリンクから支払い完了処理"""
+    payment = Payment.query.get_or_404(pid)
+    if payment.status != '完了':
+        payment.status = '完了'
+        payment.actual_date = date.today()
+        if payment.scheduled_date:
+            delta = (payment.actual_date - payment.scheduled_date).days
+            payment.delay_days = max(0, delta)
+            if payment.delay_days > 0:
+                payment.status = '遅延'
+        recalculate_score(payment.payer_id)
+    return render_template('complete.html', payment=payment)
+
 # ─────────────────────────── Admin API ───────────────────────────
 
 @app.route('/api/admin/stats', methods=['GET'])
@@ -666,19 +899,20 @@ def seed_data():
         projects.append(p)
     db.session.flush()
 
+    # (pi, payer_i, payee_i, amount, sched, actual, status, delay, due_date_offset, email)
     payments_data = [
-        (0, 1, 2, 50000000, today - timedelta(days=60), today - timedelta(days=55), '完了', 0),
-        (0, 2, 3, 30000000, today - timedelta(days=45), today - timedelta(days=30), '遅延', 15),
-        (0, 3, 4, 15000000, today - timedelta(days=30), None, '未払い', 0),
-        (1, 1, 2, 40000000, today - timedelta(days=20), today - timedelta(days=18), '完了', 0),
-        (1, 2, 5, 20000000, today - timedelta(days=10), None, '未払い', 0),
-        (2, 1, 2, 25000000, today - timedelta(days=100), today - timedelta(days=65), '遅延', 35),
-        (2, 2, 6, 12000000, today - timedelta(days=80), today - timedelta(days=79), '完了', 0),
-        (3, 1, 3, 60000000, today + timedelta(days=30), None, '未払い', 0),
-        (3, 3, 7, 18000000, today - timedelta(days=5), None, '未払い', 0),
-        (4, 2, 4, 35000000, today - timedelta(days=50), None, '未払い', 0),
+        (0, 1, 2, 50000000, today-timedelta(days=60), today-timedelta(days=55), '完了', 0,  -55, 'yamada@toyokogyo.jp'),
+        (0, 2, 3, 30000000, today-timedelta(days=45), today-timedelta(days=30), '遅延', 15, -30, 'suzuki@yamadakoumuten.jp'),
+        (0, 3, 4, 15000000, today-timedelta(days=30), None,                     '未払い', 0, -30, 'tanaka@suzukikenchiku.jp'),
+        (1, 1, 2, 40000000, today-timedelta(days=20), today-timedelta(days=18), '完了', 0,  -18, 'yamada@toyokogyo.jp'),
+        (1, 2, 5, 20000000, today-timedelta(days=10), None,                     '未払い', 0, -10, 'nakamura@tanakadобоку.jp'),
+        (2, 1, 2, 25000000, today-timedelta(days=100),today-timedelta(days=65), '遅延', 35, -65, 'yamada@toyokogyo.jp'),
+        (2, 2, 6, 12000000, today-timedelta(days=80), today-timedelta(days=79), '完了', 0,  -79, 'sato@satosetsubi.jp'),
+        (3, 1, 3, 60000000, today+timedelta(days=30), None,                     '未払い', 0, +30, 'suzuki@yamadakoumuten.jp'),
+        (3, 3, 7, 18000000, today-timedelta(days=5),  None,                     '未払い', 0,  -5, 'takahashi@takahashidenki.jp'),
+        (4, 2, 4, 35000000, today-timedelta(days=50), None,                     '未払い', 0, -50, 'tanaka@suzukikenchiku.jp'),
     ]
-    for pi, payer_i, payee_i, amount, sched, actual, status, delay in payments_data:
+    for pi, payer_i, payee_i, amount, sched, actual, status, delay, due_offset, email in payments_data:
         pay = Payment(
             project_id=projects[pi].id,
             payer_id=companies[payer_i].id,
@@ -687,7 +921,10 @@ def seed_data():
             scheduled_date=sched,
             actual_date=actual,
             status=status,
-            delay_days=delay
+            delay_days=delay,
+            due_date=today + timedelta(days=due_offset),
+            invoice_date=sched - timedelta(days=14) if sched else None,
+            payee_email=email,
         )
         db.session.add(pay)
     db.session.commit()
